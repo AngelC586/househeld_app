@@ -1,8 +1,51 @@
 # Househeld App
 
-Our senior project application :D ! We can edit and change this readme file later to include whatever a readme is supposed to contain.
+Our senior project application. Add description here at some point.
 
-## Getting Started
+## Team Members:
+
+
+## Getting started - Development
+
+To begin with the project start by making a cone of the repository.
+
+```bash
+# Cloning Repository
+git clone https://github.com/AngelC586/househeld_app.git
+```
+
+## Branching 
+
+To start wroking create your own branch: 
+
+```bash
+# Replace your-name with the name you want for the branch
+git checkout -b your-name
+
+# Add your name to this readme file
+git add .
+git commit -m "New branch"
+git push -u origin your-name
+```
+
+For any other time your can use: 
+
+```bash 
+# To step into your branch
+git checkout your-name
+```
+
+and all other git operation is the same 
+
+# Warning !!!
+
+Be sure to pull the latest branch often before you start your work to stay uptodate
+
+```bash
+git pull origin main
+```
+
+## Getting Started - Flutter
 
 This project is a starting point for a Flutter application.
 
