@@ -1,70 +1,83 @@
 # Househeld App
 
-Our senior project application. Add description here at some point.
+Our senior project application. [ Add description here at some point ]
 
 ## Team Members:
 Angel Castillo <br>
 
 
-## Getting started - Development
+## Getting started
 
-To begin with the project start by making a cone of the repository.
+To begin with development, start by making a clone of the repository:
 
 ```bash
-# Cloning Repository
-git clone https://github.com/AngelC586/househeld_app.git
+git clone https://github.com/AngelC586/househeld_app.git <your-desired-repo-directory>
 ```
 
 ## Branching 
 
-To start wroking create your own branch: 
+To start wroking, create your own branch: 
 
 ```bash
-# Replace your-name with the name you want for the branch
-git checkout -b your-name
+# Replace <your-name> with the name you want for the branch
+git checkout -b <your-name>
 
 # Add your name to the "Tean Members" section above, then:
-git add .
+git add README.md
 git commit -m "New branch"
 git push -u origin your-name
 ```
 
-For any other time your can use: 
+You can also use the Source Control tab in VS Code to do this if you prefer.
+
+Then, hop on GitHub and open a pull request for your changes. You may then merge the branches.
+
+For any other time, you can use this command to step into your branch: 
 
 ```bash 
-# To step into your branch
-git checkout your-name
+git switch <your-name>
+# `git checkout <your-name>` also works
 ```
 
-and all other git operation is the same 
+Our workflow will consist of doing work on your own branch, pushing changes, opening a pull-request, and merging.
 
-# Warning !!!
+## Important !!!
 
 Be sure to pull the latest branch often before you start your work to stay up-to-date!
+You should always pull the latest branch in both your local main branch and your local personal branch:
 
 ```bash
+# Check your current working branch:
+git branch --show-current
+
+# Pull changes into that branch:
 git pull origin main
+
+# Switch your branch and pull again:
+git switch main
+git switch <your-name>
 ```
 
-You should pull the latest branch in both your local main branch and your personal branch.
+Also be sure to notify the team whenever you push/merge your work!!! If we're working on the project at the same time 
+and one of us pushes changes, we need to announce it so the others can pull those changes before continuing their own work!
+
+## Testing
+When testing the app, you MUST have your emulator running because Firebase was only set up for Android/iOS platforms, 
+so attempting to run the app on any other platforms, like Windows, MacOS, or Web, WILL NOT WORK!
 
 ```bash
-# You can switch branches with:
-git switch main
-
-git switch <your-branch-name>
+# Launch your emulator, then:
+flutter run
 ```
 
-## Getting Started - Flutter
+[ I'll add documentation here for testing using the Firebase Emulator Suite later ]
 
-This project is a starting point for a Flutter application.
+## Troubleshooting
+If the app isn't working, it may be because you need to install dependencies or regenerate registrant files.
+All of the app's dependencies are kept in `pubspec.yaml` and can be easily fetched with this command:
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+```
+NOTE: If you are working on the app and you see files with names such as `Generated_Plugin_Registrant` or similar, 
+do NOT stage or push these files!!! Always check your Source Control tab on VS Code to make sure these files aren't being tracked by git!
