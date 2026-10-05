@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(householdID) {
+      return signedIn()
+        && exists(
+          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+        );
+    }
+
+    match /users/{userID} {
+      allow read: if signedIn() && request.auth.uid == userID;
+
+      allow create, update: if signedIn()
+        && request.auth.uid == userID
+        && request.resource.data.keys().hasOnly([
+          'username', 'email', 'displayName'
+        ])
+        && request.resource.data.username is string
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string;
+    }
+
+    match /households/{householdID} {
+      allow get: if signedIn()
+        && (householdID == 'demo-household' || isMember(householdID));
+
+      match /members/{memberID} {
+        allow read: if isMember(householdID)
+          || (signedIn() && memberID == request.auth.uid);
+
+        allow create: if signedIn()
+          && householdID == 'demo-household'
+          && exists(
+            /databases/$(database)/documents/households/$(householdID)
+          )
+          && memberID == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'userID', 'householdID', 'memberRole'
+          ])
+          && request.resource.data.userID == request.auth.uid
+          && request.resource.data.householdID == householdID
+          && request.resource.data.memberRole == 'member';
+      }
+
+      match /tasks/{taskID} {
+        allow read: if isMember(householdID);
+
+        allow create: if isMember(householdID)
+          && request.resource.data.keys().hasOnly([
+            'taskName', 'taskDescription', 'taskStatus',
+            'createdByMemberID'
+          ])
+          && request.resource.data.taskName is string
+          && request.resource.data.taskName.size() > 0
+          && request.resource.data.taskName.size() <= 200
+          && request.resource.data.taskDescription is string
+          && request.resource.data.taskStatus == 'pending'
+          && request.resource.data.createdByMemberID == request.auth.uid;
+
+        allow update: if isMember(householdID)
+          && resource.data.taskStatus == 'pending'
+          && request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'taskStatus', 'completedByMemberID', 'taskCompletionTime'
+              ])
+          && request.resource.data.taskStatus == 'completed'
+          && request.resource.data.completedByMemberID == request.auth.uid
+          && request.resource.data.taskCompletionTime == request.time;
+      }
+    }
+  }
+}
