@@ -2,8 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+
 import 'login_screen.dart';
-import 'main.dart';
+
+import 'screens/home_screen.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -18,7 +20,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (kDebugMode && bypassAuth) {
-      return MyHomePage(
+      return HomeScreen(
         title: 'HouseHeld',
         onLogout: () {
           setState(() {
@@ -38,7 +40,7 @@ class _AuthGateState extends State<AuthGate> {
         }
 
         if (snapshot.hasData) {
-          return MyHomePage(
+          return HomeScreen(
             title: 'HouseHeld',
             onLogout: () async {
               await FirebaseAuth.instance.signOut();
