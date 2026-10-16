@@ -28,6 +28,35 @@ class UserProfile {
       };
 }
 
+class Household {
+  final String householdID;
+  final String householdName;
+  final String creatorID;
+
+  const Household({
+    required this.householdID,
+    required this.householdName,
+    required this.creatorID,
+  });
+
+  factory Household.fromMap(
+    String householdID,
+    Map<String, dynamic> data,
+  ) {
+    return Household(
+      householdID: householdID,
+      householdName: data['householdName'] as String,
+      creatorID: data['creatorID'] as String,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'householdName': householdName,
+      'creatorID': creatorID,
+    };
+  }
+}
 
 class HouseholdMember {
   final String userID; // matches the signed-in user's UID
