@@ -13,39 +13,200 @@ service cloud.firestore {
         );
     }
 
+    // Check whether this transaction creates a household
+    // owned by the signed-in user.
+    function createsHousehold(householdID) {
+      return signedIn()
+        && !exists(
+          /databases/$(database)/documents/households/$(householdID)
+        )
+        && getAfter(
+          /databases/$(database)/documents/households/$(householdID)
+        ).data.creatorID == request.auth.uid;
+    }
+
+    // The user must already have a profile without a household.
+    function hasNoHousehold() {
+      let profile = get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      ).data;
+
+      return profile.get('householdID', null) == null
+        || profile.get('householdID', null) == '';
+    }
+
+    // Check the profile's household link after the transaction.
+    function profileLinksTo(householdID) {
+      return getAfter(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      ).data.householdID == householdID;
+    }
+
+    // Check the creator's membership after the transaction.
+    function hasManagerMembershipAfter(householdID) {
+      let member = getAfter(
+        /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+      ).data;
+
+      return member.userID == request.auth.uid
+        && member.householdID == householdID
+        && member.memberRole == 'manager';
+    }
+
+    function validProfile(data) {
+      return data.keys().hasOnly([
+          'username', 'email', 'displayName', 'householdID'
+        ])
+        && data.username is string
+        && data.email is string
+        && data.displayName is string
+        && (
+          data.get('householdID', null) == null
+          || data.get('householdID', null) is string
+        );
+    }
+
+    // Validate joining an existing household
+    function joinsHousehold(householdID) {
+      return signedIn()
+        && exists(
+          /databases/$(database)/documents/households/$(householdID)
+        )
+        && hasNoHousehold()
+        && profileLinksTo(householdID)
+        && getAfter(
+          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+        ).data.userID == request.auth.uid
+        && getAfter(
+          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+        ).data.householdID == householdID
+        && getAfter(
+          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+        ).data.memberRole == 'member';
+    }
+
     match /users/{userID} {
       allow read: if signedIn() && request.auth.uid == userID;
 
-      allow create, update: if signedIn()
+      // Signup creates a profile without household membership.
+      allow create: if signedIn()
         && request.auth.uid == userID
-        && request.resource.data.keys().hasOnly([
-          'username', 'email', 'displayName'
-        ])
-        && request.resource.data.username is string
-        && request.resource.data.email is string
-        && request.resource.data.displayName is string;
+        && validProfile(request.resource.data)
+        && request.resource.data.get('householdID', null) == null;
+
+      // Keep the existing household link, or establish one
+      // through a valid create or join transaction.
+      allow update: if signedIn()
+        && request.auth.uid == userID
+        && validProfile(request.resource.data)
+        && (
+          request.resource.data.get('householdID', null)
+            == resource.data.get('householdID', null)
+          || (
+            (
+              resource.data.get('householdID', null) == null
+              || resource.data.get('householdID', null) == ''
+            )
+            && request.resource.data.householdID is string
+            && request.resource.data.householdID.size() > 0
+            && (
+              (
+                createsHousehold(request.resource.data.householdID)
+                && hasManagerMembershipAfter(
+                  request.resource.data.householdID
+                )
+              )
+              || joinsHousehold(request.resource.data.householdID)
+            )
+          )
+        );
     }
 
     match /households/{householdID} {
-      allow get: if signedIn()
-        && (householdID == 'demo-household' || isMember(householdID));
+      allow get: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'householdName', 'creatorID'
+        ])
+        && request.resource.data.householdName is string
+        && request.resource.data.householdName.size() > 0
+        && request.resource.data.creatorID == request.auth.uid
+        && hasNoHousehold()
+        && profileLinksTo(householdID)
+        && hasManagerMembershipAfter(householdID);
 
       match /members/{memberID} {
         allow read: if isMember(householdID)
           || (signedIn() && memberID == request.auth.uid);
 
+        // Creators become Managers; people joining become Members.
         allow create: if signedIn()
-          && householdID == 'demo-household'
-          && exists(
-            /databases/$(database)/documents/households/$(householdID)
-          )
           && memberID == request.auth.uid
           && request.resource.data.keys().hasOnly([
             'userID', 'householdID', 'memberRole'
           ])
           && request.resource.data.userID == request.auth.uid
           && request.resource.data.householdID == householdID
-          && request.resource.data.memberRole == 'member';
+          && (
+            (
+              request.resource.data.memberRole == 'manager'
+              && createsHousehold(householdID)
+              && hasNoHousehold()
+              && profileLinksTo(householdID)
+            )
+            || (
+              request.resource.data.memberRole == 'member'
+              && joinsHousehold(householdID)
+            )
+          );
+
+        match /personalItemsLists/{listID} {
+          // Other household members cannot read this private list.
+          allow read: if signedIn()
+            && memberID == request.auth.uid
+            && isMember(householdID);
+
+          // Initialize the user's private list when creating or joining.
+            allow create: if signedIn()
+              && memberID == request.auth.uid
+              && listID == 'default'
+              && (
+                createsHousehold(householdID)
+                || joinsHousehold(householdID)
+              )
+              && request.resource.data.keys().hasOnly([
+                'listName', 'listVisibility', 'ownerMemberID'
+              ])
+              && request.resource.data.listName == 'Personal Items'
+              && request.resource.data.listVisibility == 'private'
+              && request.resource.data.ownerMemberID == request.auth.uid;
+          }
+        }
+
+      match /householdItemsLists/{listID} {
+        allow read: if isMember(householdID);
+
+        allow create: if listID == 'default'
+          && createsHousehold(householdID)
+          && request.resource.data.keys().hasOnly([
+            'listName', 'listVisibility'
+          ])
+          && request.resource.data.listName == 'Household Items'
+          && request.resource.data.listVisibility == 'shared';
+      }
+
+      match /groceryLists/{listID} {
+        allow read: if isMember(householdID);
+
+        allow create: if listID == 'default'
+          && createsHousehold(householdID)
+          && request.resource.data.keys().hasOnly([
+            'groceryListName', 'groceryListVisibility', 'ownerMemberID'
+          ])
+          && request.resource.data.groceryListName == 'Grocery List'
+          && request.resource.data.groceryListVisibility == 'shared'
+          && request.resource.data.ownerMemberID == null;
       }
 
       match /tasks/{taskID} {
