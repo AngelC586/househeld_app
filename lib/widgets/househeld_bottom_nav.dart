@@ -14,8 +14,8 @@ class HouseheldBottomNav extends StatelessWidget {
   static const _items = [
     ('Home', Icons.home_outlined),
     ('Tasks', Icons.check_circle_outline),
-    ('Food', Icons.set_meal_outlined),
-    ('Personal', Icons.face_outlined),
+    ('Pantry', Icons.set_meal_outlined),
+    ('Stuff', Icons.face_outlined),
     ('Grocery', Icons.list_alt_outlined),
   ];
 

@@ -90,14 +90,16 @@ class HouseholdTask {
 
   
   HouseholdTask copyWith({
+    String? taskName,
+    String? taskDescription,
     String? taskStatus,
     String? completedByMemberID,
     DateTime? taskCompletionTime,
   }) {
     return HouseholdTask(
       taskId: taskId,
-      taskName: taskName,
-      taskDescription: taskDescription,
+      taskName: taskName ?? this.taskName,
+      taskDescription: taskDescription ?? this.taskDescription,
       taskStatus: taskStatus ?? this.taskStatus,
       createdByMemberID: createdByMemberID,
       completedByMemberID: completedByMemberID ?? this.completedByMemberID,

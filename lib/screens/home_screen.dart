@@ -7,6 +7,7 @@ import '../widgets/low_stock_row.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/task_row_card.dart';
 import '../widgets/zero_state.dart';
+import 'tasks_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.title, required this.onLogout});
@@ -23,8 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   
   //sample data to show what the home screen will look like
-
-
   final List<DisplayMember> _members = const [
     DisplayMember(
       profile: UserProfile(uid: 'u1', username: 'ana', email: 'ana@example.com', displayName: 'Ana'),
@@ -72,7 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ActivityEntry(text: 'Ana restocked Milk', time: 'yesterday', isRestock: true),
   ];
 
-  
 
   void _toggleTask(HouseholdTask task) {
     setState(() {
@@ -115,7 +113,17 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: HouseheldBottomNav(
         currentIndex: _navIndex,
-        onTap: (i) => setState(() => _navIndex = i),
+        onTap: (i) {
+          if (i == 0) return;
+          if (i == 1) {
+            Navigator.push(
+              context, 
+              MaterialPageRoute(builder: (_) => const TasksScreen()),
+            );
+            return;
+          }
+        }
+        
       ),
     );
   }
