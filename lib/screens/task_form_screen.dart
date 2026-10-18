@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../theme/app_theme.dart';
 
-/// Used for both creating a new task and editing an existing one.
-/// Pass [existingTask] to edit; leave it null to create.
-///
-/// Returns the new/updated HouseholdTask via Navigator.pop when the user
-/// taps Create/Save, or null if they cancel/back out without saving.
+
 class TaskFormScreen extends StatefulWidget {
   const TaskFormScreen({
     super.key,
@@ -51,8 +47,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     final result = widget.isEditing
         ? widget.existingTask!.copyWith(taskName: name, taskDescription: description)
         : HouseholdTask(
-            // TODO: once Firestore is wired up, this is where
-            // .add(task.toCreateMap()) happens instead of a local id.
             taskId: 'local-${DateTime.now().millisecondsSinceEpoch}',
             taskName: name,
             taskDescription: description,
@@ -73,7 +67,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // No app-wide navbar here on purpose — just a back button.
               Row(
                 children: [
                   IconButton(
