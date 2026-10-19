@@ -34,7 +34,9 @@ class _HouseholdOnboardingScreenState extends State<HouseholdOnboardingScreen> {
   Future<void> _submit({required bool creating}) async {
     if (_isLoading) return;
 
-    final value = creating ? _nameController.text.trim() : _idController.text.trim();
+    final value = creating
+        ? _nameController.text.trim()
+        : _idController.text.trim();
 
     if (value.isEmpty) {
       setState(() {
@@ -57,11 +59,13 @@ class _HouseholdOnboardingScreenState extends State<HouseholdOnboardingScreen> {
         await widget.onJoin(value);
       }
     } catch (error) {
-      if (mounted) return;
+      if (!mounted) return;
 
       setState(() {
-        _errorMessage = error is StateError ? error.message.toString() : 'Unable to ${creating ? 'create' : 'join'} the household. '
-          'Please try again.';
+        _errorMessage = error is StateError
+            ? error.message.toString()
+            : 'Unable to ${creating ? 'create' : 'join'} the household. '
+                  'Please try again.';
       });
     } finally {
       if (mounted) {
@@ -109,11 +113,13 @@ class _HouseholdOnboardingScreenState extends State<HouseholdOnboardingScreen> {
           ),
         ],
       ),
-      body: SafeArea(child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480),
-          child: Column(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
@@ -195,7 +201,7 @@ class _HouseholdOnboardingScreenState extends State<HouseholdOnboardingScreen> {
               ),
             ),
           ),
-        )
+        ),
       ),
     );
   }

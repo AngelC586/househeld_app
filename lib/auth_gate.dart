@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-
-import 'login_screen.dart';
+import 'models.dart';
+import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/household_onboarding_screen.dart';
 import 'services/household_service.dart';
@@ -27,30 +27,21 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Widget _loadingScreen() {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 
   Widget _messageScreen(String message) {
     return Scaffold(
-      appBar: AppBar(title: const Text('HouseHeld'),
-      ),
+      appBar: AppBar(title: const Text('HouseHeld')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                message,
-                textAlign: TextAlign.center,
-              ),
+              Text(message, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              TextButton(
-                onPressed: _signOut,
-                child: const Text('Sign out'),
-              ),
+              TextButton(onPressed: _signOut, child: const Text('Sign out')),
             ],
           ),
         ),
@@ -77,11 +68,11 @@ class _AuthGateState extends State<AuthGate> {
           return _loadingScreen();
         }
 
-        final profile = profileSnapshot.data!.data();
+        final profileData = profileSnapshot.data!.data();
 
         // Signup may create the Auth account before saving its profile
         // This listener will update when the profile becomes available
-        if (profile == null) {
+        if (profileData == null) {
           return _messageScreen(
             'Waiting for your profile to finish setting up. '
             'If this message remains, your profile may not have '
@@ -89,7 +80,9 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
 
-        final householdID = profile['householdID'];
+        final userProfile = UserProfile.fromMap(user.uid, profileData);
+
+        final householdID = userProfile.householdID;
 
         // No household yet; show the create/join screen
         if (householdID == null || householdID == '') {
@@ -105,22 +98,15 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
 
-        if (householdID is! String) {
-          return _messageScreen(
-            'Your profile has an invalid household ID. '
-            'Please contact your team to correct it.',
-          );
-        }
-
         // Confirm the membership exists before showing the home screen
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           key: ValueKey('${user.uid}-$householdID'),
           stream: FirebaseFirestore.instance
-            .collection('households')
-            .doc(householdID)
-            .collection('members')
-            .doc(user.uid)
-            .snapshots(),
+              .collection('households')
+              .doc(householdID)
+              .collection('members')
+              .doc(user.uid)
+              .snapshots(),
           builder: (context, memberSnapshot) {
             if (memberSnapshot.hasError) {
               return _messageScreen(
@@ -135,30 +121,37 @@ class _AuthGateState extends State<AuthGate> {
 
             final member = memberSnapshot.data!.data();
 
-            if (member == null || 
+            if (member == null ||
                 member['userID'] != user.uid ||
                 member['householdID'] != householdID) {
               return _messageScreen(
                 'Your profile and household membership do not match. '
                 'Please contact your team to correct it.',
               );
-          }
+            }
 
             return HomeScreen(
               title: 'HouseHeld',
+              userProfile: userProfile,
               onLogout: _signOut,
             );
           },
         );
       },
     );
-  }          
+  }
 
   @override
   Widget build(BuildContext context) {
     if (kDebugMode && bypassAuth) {
       return HomeScreen(
         title: 'HouseHeld',
+        userProfile: const UserProfile(
+          uid: 'debug-user',
+          username: 'debug',
+          email: 'debug@example.com',
+          displayName: 'Debug User',
+        ),
         onLogout: () {
           setState(() {
             bypassAuth = false;

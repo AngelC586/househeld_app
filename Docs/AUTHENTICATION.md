@@ -50,8 +50,9 @@ considers the user to not be authenticated and displays the login screen.
 This means that the app does not manually navigate to the home screen after a successful login. Instead, Firebase changes the authentication
 state and the `AuthGate()` class detects those changes, prompting Flutter to rebuild the appropriate UI.
 
-So, if the user is not already signed in, Flutter takes them to `login_screen.dart`, which contains the logic for the login screen UI,
-user registration, and user sign in.
+So, if the user is not already signed in, Flutter takes them to `login_screen.dart`, which contains the logic for the login screen UI and user sign in.
+The login screen also has a button to register for an account, which takes users to `registration_screen.dart`, which itself contains the logic for
+the registration screen UI and user registration.
 
 ## Registration
 
@@ -90,7 +91,7 @@ FirebaseFirestore.instance.collection('users').doc(user.uid).set({
 This function creates a new entry in the Cloud Firestore database for the newly registered user using their submitted credentials. 
 For more information about the database and it's document hierarchy, see [DATABASE.md](DATABASE.md).
 
-The `login_screen.dart` file also contains exception handling code that catches and handles exceptions thrown by Firebase Auth.
+The `registration_screen.dart` file also contains exception handling code that catches and handles exceptions thrown by Firebase Auth.
 In most cases, these exceptions consist of errors that may occur when attempting to register, such as when attempting to register 
 with an email that is already registered or entering an email with an invalid format.
 
@@ -124,15 +125,11 @@ the home screen.
 
 The application itself does not need to manually load or compare user credentials, as Firebase Auth performs credential verification automatically.
 
-Like registration, `login_screen.dart` has additional exception handling for signing in which throws FirebaseAuth errors for things such as
+Like registration, `login_screen.dart` has exception handling for signing in which throws FirebaseAuth errors for things such as
 a wrong password, invalid email/password combination, a disabled account, or other authentication failture related errors.
 
 Additionally, Firebase Auth automatically persists a user's authenticated sessions on supported mobile devices, meaning that after a successful
 sign-in, a user can expect to exit the app, still be signed in when returning, and be shown the home screen immediately upon reopening the app.
-
-Currently, however, Cloud Firestore user profiles do NOT get loaded back in when closing and reopening the app. This means that a signed-in user
-who closes and reopens the app right now will not have their Firebase Auth and Cloud Firestore data matched, meaning they will be blocked
-from accessing their own app data until they log out and log back in, as per the Firestore Rules.
 
 Should a user decide to sign-out, Firebase clears their current authentication session. Internally, the User object becomes `null`,
 then `authStateChanges()` emits `null`, then `AuthGate()` rebuilds itself and the login screen appears once again.
@@ -164,14 +161,9 @@ All tests here confirm that the simple authentication system is functioning corr
 ## Future Authentication Work
 
 The current implementation is intentionally minimal and was made merely a proof-of-concept for authentication services.
-Potential future improvements, changes, and additions include:
-* Separating Sign-In and Registration Screens
+Potential future improvements, changes, and additions could include:
 * Signing in with username
-* Better/simpler error messages
-* Password confirmation
-* Show password
 * Password reset and forgot password flow
 * Email verification
 * Account settings and changing account details
 * Deleting account
-* Loading Firestore user profile after login

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/avatar_chip.dart';
@@ -10,9 +11,15 @@ import '../widgets/zero_state.dart';
 import 'tasks_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.title, required this.onLogout});
+  const HomeScreen({
+    super.key,
+    required this.title,
+    required this.userProfile,
+    required this.onLogout,
+  });
 
   final String title;
+  final UserProfile userProfile;
   final VoidCallback onLogout;
 
   @override
@@ -20,26 +27,52 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _navIndex = 0;
+  final int _navIndex = 0;
 
-  
   //sample data to show what the home screen will look like
   final List<DisplayMember> _members = const [
     DisplayMember(
-      profile: UserProfile(uid: 'u1', username: 'ana', email: 'ana@example.com', displayName: 'Ana'),
-      membership: HouseholdMember(userID: 'u1', householdID: 'demo-household', memberRole: 'manager'),
+      profile: UserProfile(
+        uid: 'u1',
+        username: 'ana',
+        email: 'ana@example.com',
+        displayName: 'Ana',
+      ),
+      membership: HouseholdMember(
+        userID: 'u1',
+        householdID: 'demo-household',
+        memberRole: 'manager',
+      ),
     ),
     DisplayMember(
-      profile: UserProfile(uid: 'u2', username: 'alex', email: 'alex@example.com', displayName: 'Alex'),
-      membership: HouseholdMember(userID: 'u2', householdID: 'demo-household', memberRole: 'member'),
+      profile: UserProfile(
+        uid: 'u2',
+        username: 'alex',
+        email: 'alex@example.com',
+        displayName: 'Alex',
+      ),
+      membership: HouseholdMember(
+        userID: 'u2',
+        householdID: 'demo-household',
+        memberRole: 'member',
+      ),
     ),
     DisplayMember(
-      profile: UserProfile(uid: 'u3', username: 'mira', email: 'mira@example.com', displayName: 'Mira'),
-      membership: HouseholdMember(userID: 'u3', householdID: 'demo-household', memberRole: 'child'),
+      profile: UserProfile(
+        uid: 'u3',
+        username: 'mira',
+        email: 'mira@example.com',
+        displayName: 'Mira',
+      ),
+      membership: HouseholdMember(
+        userID: 'u3',
+        householdID: 'demo-household',
+        memberRole: 'child',
+      ),
     ),
   ];
 
-  List<HouseholdTask> _tasks = [
+  final List<HouseholdTask> _tasks = [
     const HouseholdTask(
       taskId: 't1',
       taskName: 'Take out recycling',
@@ -68,16 +101,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<ActivityEntry> _activity = const [
     ActivityEntry(text: 'Alex completed Take out recycling', time: '2hrs ago'),
-    ActivityEntry(text: 'Ana restocked Milk', time: 'yesterday', isRestock: true),
+    ActivityEntry(
+      text: 'Ana restocked Milk',
+      time: 'yesterday',
+      isRestock: true,
+    ),
   ];
-
 
   void _toggleTask(HouseholdTask task) {
     setState(() {
       final i = _tasks.indexWhere((t) => t.taskId == task.taskId);
       _tasks[i] = task.isCompleted
           ? task.copyWith(taskStatus: 'pending', completedByMemberID: null)
-          : task.copyWith(taskStatus: 'completed', completedByMemberID: 'u1' /* */);
+          : task.copyWith(
+              taskStatus: 'completed',
+              completedByMemberID: 'u1' /* */,
+            );
     });
   }
 
@@ -86,7 +125,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _lowStock.remove(item);
       _activity.insert(
         0,
-        ActivityEntry(text: 'Marked ${item.name} empty', time: 'just now', isRestock: true),
+        ActivityEntry(
+          text: 'Marked ${item.name} empty',
+          time: 'just now',
+          isRestock: true,
+        ),
       );
     });
   }
@@ -117,48 +160,59 @@ class _HomeScreenState extends State<HomeScreen> {
           if (i == 0) return;
           if (i == 1) {
             Navigator.push(
-              context, 
+              context,
               MaterialPageRoute(builder: (_) => const TasksScreen()),
             );
             return;
           }
-        }
-        
+        },
       ),
     );
   }
 
   Widget _buildHeader() {
-  final name = _members.first.profile.displayName;
-  return Container(
-    width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-    decoration: const BoxDecoration(
-      color: AppColors.forest,
-      borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Welcome home,', style: AppText.body.copyWith(color: const Color(0xFFC7D4C9), fontSize: 13)),
-              const SizedBox(height: 2),
-              Text(name, style: AppText.heading.copyWith(color: Colors.white, fontSize: 24)),
-            ],
+    final name = widget.userProfile.displayName;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+      decoration: const BoxDecoration(
+        color: AppColors.forest,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome home,',
+                  style: AppText.body.copyWith(
+                    color: const Color(0xFFC7D4C9),
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  name,
+                  style: AppText.heading.copyWith(
+                    color: Colors.white,
+                    fontSize: 24,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        IconButton(
-          onPressed: widget.onLogout,
-          icon: const Icon(Icons.logout, color: Colors.white),
-          tooltip: 'Log out',
-        ),
-      ],
-    ),
-  );
-}
+          IconButton(
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout, color: Colors.white),
+            tooltip: 'Log out',
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildNormalState() {
     final dueCount = _tasks.where((t) => !t.isCompleted).length;
@@ -198,7 +252,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ..._lowStock.map(
           (item) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: LowStockRow(item: item, onAdd: () => _addToGroceryList(item)),
+            child: LowStockRow(
+              item: item,
+              onAdd: () => _addToGroceryList(item),
+            ),
           ),
         ),
         if (_lowStock.isEmpty)

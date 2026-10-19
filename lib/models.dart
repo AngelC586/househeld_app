@@ -1,15 +1,16 @@
-
 class UserProfile {
-  final String uid; 
+  final String uid;
   final String username;
   final String email;
   final String displayName;
+  final String? householdID;
 
   const UserProfile({
     required this.uid,
     required this.username,
     required this.email,
     required this.displayName,
+    this.householdID,
   });
 
   factory UserProfile.fromMap(String uid, Map<String, dynamic> data) {
@@ -18,14 +19,16 @@ class UserProfile {
       username: data['username'] as String? ?? '',
       email: data['email'] as String? ?? '',
       displayName: data['displayName'] as String? ?? '',
+      householdID: data['householdID'] as String?,
     );
   }
 
   Map<String, dynamic> toMap() => {
-        'username': username,
-        'email': email,
-        'displayName': displayName,
-      };
+    'username': username,
+    'email': email,
+    'displayName': displayName,
+    if (householdID != null) 'householdID': householdID,
+  };
 }
 
 class Household {
@@ -39,10 +42,7 @@ class Household {
     required this.creatorID,
   });
 
-  factory Household.fromMap(
-    String householdID,
-    Map<String, dynamic> data,
-  ) {
+  factory Household.fromMap(String householdID, Map<String, dynamic> data) {
     return Household(
       householdID: householdID,
       householdName: data['householdName'] as String,
@@ -51,17 +51,14 @@ class Household {
   }
 
   Map<String, dynamic> toMap() {
-    return {
-      'householdName': householdName,
-      'creatorID': creatorID,
-    };
+    return {'householdName': householdName, 'creatorID': creatorID};
   }
 }
 
 class HouseholdMember {
   final String userID; // matches the signed-in user's UID
   final String householdID;
-  final String memberRole; 
+  final String memberRole;
 
   const HouseholdMember({
     required this.userID,
@@ -78,12 +75,11 @@ class HouseholdMember {
   }
 
   Map<String, dynamic> toMap() => {
-        'userID': userID,
-        'householdID': householdID,
-        'memberRole': memberRole,
-      };
+    'userID': userID,
+    'householdID': householdID,
+    'memberRole': memberRole,
+  };
 }
-
 
 class DisplayMember {
   final UserProfile profile;
@@ -91,14 +87,14 @@ class DisplayMember {
 
   const DisplayMember({required this.profile, required this.membership});
 
-  String get initial =>
-      profile.displayName.isNotEmpty ? profile.displayName[0].toUpperCase() : '?';
+  String get initial => profile.displayName.isNotEmpty
+      ? profile.displayName[0].toUpperCase()
+      : '?';
 }
 
-
 class HouseholdTask {
-  final String taskId; 
-  final String taskName; 
+  final String taskId;
+  final String taskName;
   final String taskDescription; // may be empty
   final String taskStatus; // "pending" | "completed"
   final String createdByMemberID;
@@ -117,7 +113,6 @@ class HouseholdTask {
 
   bool get isCompleted => taskStatus == 'completed';
 
-  
   HouseholdTask copyWith({
     String? taskName,
     String? taskDescription,
@@ -136,20 +131,17 @@ class HouseholdTask {
     );
   }
 
-  
   Map<String, dynamic> toCreateMap() => {
-        'taskName': taskName,
-        'taskDescription': taskDescription,
-        'taskStatus': 'pending',
-        'createdByMemberID': createdByMemberID,
-      };
+    'taskName': taskName,
+    'taskDescription': taskDescription,
+    'taskStatus': 'pending',
+    'createdByMemberID': createdByMemberID,
+  };
 
-  
   static Map<String, dynamic> completeMap(String completedByMemberID) => {
-        'taskStatus': 'completed',
-        'completedByMemberID': completedByMemberID,
-        
-      };
+    'taskStatus': 'completed',
+    'completedByMemberID': completedByMemberID,
+  };
 
   factory HouseholdTask.fromMap(String taskId, Map<String, dynamic> data) {
     return HouseholdTask(
@@ -159,19 +151,16 @@ class HouseholdTask {
       taskStatus: data['taskStatus'] as String? ?? 'pending',
       createdByMemberID: data['createdByMemberID'] as String? ?? '',
       completedByMemberID: data['completedByMemberID'] as String?,
-      
     );
   }
 }
 
-
 class LowStockItem {
   final String name;
-  final String category; 
+  final String category;
 
   const LowStockItem({required this.name, required this.category});
 }
-
 
 class ActivityEntry {
   final String text;
