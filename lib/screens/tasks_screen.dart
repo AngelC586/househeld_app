@@ -166,10 +166,6 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  // --------------------------------------------------------------------
-  // Tab contents
-  // --------------------------------------------------------------------
-
   Widget _taskList(List<HouseholdTask> tasks, {required String emptyText}) {
     final sorted = _sorted(tasks);
     return ListView(
@@ -207,8 +203,6 @@ class _TasksScreenState extends State<TasksScreen> {
   @override
   Widget build(BuildContext context) {
     final allTasks = _tasks;
-    // "Assigned" is approximated as "created by you" — same approximation
-    // the Assignee sort uses, since there's no real assignee field yet.
     final assignedTasks = _tasks.where((t) => t.createdByMemberID == _currentUserID).toList();
     final finishedTasks = _tasks.where((t) => t.isCompleted).toList();
 
@@ -237,7 +231,6 @@ class _TasksScreenState extends State<TasksScreen> {
               icon: const Icon(Icons.menu),
               tooltip: 'Menu',
               onPressed: () {
-                // TODO: wire up whatever the top-level menu should contain
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Menu — not built yet')),
                 );
