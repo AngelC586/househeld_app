@@ -9,6 +9,7 @@ import '../widgets/stat_card.dart';
 import '../widgets/task_row_card.dart';
 import '../widgets/zero_state.dart';
 import 'tasks_screen.dart';
+import 'pantry_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -162,6 +163,13 @@ class _HomeScreenState extends State<HomeScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const TasksScreen()),
+            );
+            return;
+          }
+          if (i == 2) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PantryScreen()),
             );
             return;
           }
