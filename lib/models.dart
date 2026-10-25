@@ -251,6 +251,42 @@ class LowStockItem {
 
   const LowStockItem({required this.name, required this.category});
 }
+class StuffItem {
+  final String itemId;
+  final String itemName;
+  final String itemDescription; // optional, may be empty
+  final String itemStatus; // 'available' | 'low' | 'out_of_stock'
+  final String listType; // 'household' | 'private'
+  final String ownerMemberID; // whose private list it's on (ignored for household items)
+ 
+  const StuffItem({
+    required this.itemId,
+    required this.itemName,
+    this.itemDescription = '',
+    this.itemStatus = 'available',
+    required this.listType,
+    required this.ownerMemberID,
+  });
+ 
+  bool get isPrivate => listType == 'private';
+ 
+  StuffItem copyWith({
+    String? itemName,
+    String? itemDescription,
+    String? itemStatus,
+  }) {
+    return StuffItem(
+      itemId: itemId,
+      itemName: itemName ?? this.itemName,
+      itemDescription: itemDescription ?? this.itemDescription,
+      itemStatus: itemStatus ?? this.itemStatus,
+      listType: listType,
+      ownerMemberID: ownerMemberID,
+    );
+  }
+}
+
+
 
 class ActivityEntry {
   final String text;
