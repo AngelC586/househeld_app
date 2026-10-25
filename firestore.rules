@@ -196,10 +196,10 @@ service cloud.firestore {
           && request.resource.data.listVisibility == 'shared';
       }
 
-      match /groceryLists/{listID} {
+      match /groceryLists/{groceryListID} {
         allow read: if isMember(householdID);
 
-        allow create: if listID == 'default'
+        allow create: if groceryListID == 'default'
           && createsHousehold(householdID)
           && request.resource.data.keys().hasOnly([
             'groceryListName', 'groceryListVisibility', 'ownerMemberID'
@@ -207,6 +207,14 @@ service cloud.firestore {
           && request.resource.data.groceryListName == 'Grocery List'
           && request.resource.data.groceryListVisibility == 'shared'
           && request.resource.data.ownerMemberID == null;
+        
+        match /items/{groceryItemID} {
+          allow read: if isMember(householdID);
+
+          allow create, update: if isMember(householdID);
+
+          allow delete: if isMember(householdID);
+        }
       }
 
       match /tasks/{taskID} {
@@ -233,6 +241,71 @@ service cloud.firestore {
           && request.resource.data.taskStatus == 'completed'
           && request.resource.data.completedByMemberID == request.auth.uid
           && request.resource.data.taskCompletionTime == request.time;
+      }
+
+      match /pantryItems/{foodItemID} {
+        allow read: if isMember(householdID);
+
+        allow create: if isMember(householdID)
+          && request.resource.data.keys().hasAll([
+            'foodName',
+            'foodType',
+            'foodQuantity',
+            'foodStockStatus',
+            'foodDescription'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'foodName',
+            'foodType',
+            'foodQuantity',
+            'foodStockStatus',
+            'foodDescription'
+          ])
+          && request.resource.data.foodName is string
+          && request.resource.data.foodName.size() > 0
+          && request.resource.data.foodType is string
+          && request.resource.data.foodQuantity is int
+          && request.resource.data.foodQuantity >= 0
+          && request.resource.data.foodDescription is string
+          && (
+            (
+              request.resource.data.foodQuantity > 0
+              && request.resource.data.foodStockStatus == 'inStock'
+            )
+            ||
+            (
+              request.resource.data.foodQuantity == 0
+              && request.resource.data.foodStockStatus == 'outOfStock'
+            )
+          );
+
+        allow update: if isMember(householdID)
+          && request.resource.data.keys().hasOnly([
+            'foodName',
+            'foodType',
+            'foodQuantity',
+            'foodStockStatus',
+            'foodDescription'
+          ])
+          && request.resource.data.foodName is string
+          && request.resource.data.foodName.size() > 0
+          && request.resource.data.foodType is string
+          && request.resource.data.foodQuantity is int
+          && request.resource.data.foodQuantity >= 0
+          && request.resource.data.foodDescription is string
+          && (
+            (
+              request.resource.data.foodQuantity > 0
+              && request.resource.data.foodStockStatus == 'inStock'
+            )
+            ||
+            (
+              request.resource.data.foodQuantity == 0
+              && request.resource.data.foodStockStatus == 'outOfStock'
+            )
+          );
+
+        allow delete: if isMember(householdID);
       }
     }
   }

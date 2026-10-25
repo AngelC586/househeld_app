@@ -238,9 +238,6 @@ class _StuffScreenState extends State<StuffScreen> {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const TasksScreen()));
             return;
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Coming soon')),
-          );
         },
       ),
     );

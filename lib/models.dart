@@ -155,6 +155,96 @@ class HouseholdTask {
   }
 }
 
+// List of food item types:
+const List<String> pantryFoodType = [
+  'Nuts/Seeds',
+  'Pasta',
+  'Bread',
+  'Canned/Jarred',
+  'Snack',
+  'Cereal',
+  'Condiment',
+  'Spice/Seasoning',
+  'Fruit',
+  'Vegetable',
+  'Dairy',
+  'Meat',
+  'Frozen',
+  'Beverage',
+  'Other',
+];
+
+const String pantryInStock = 'inStock';
+const String pantryOutOfStock = 'outOfStock';
+
+// Pantry feature data:
+class PantryItem {
+  final String foodItemID;
+  final String foodName;
+  final String foodType;
+  final int foodQuantity;
+  final String foodStockStatus;
+  final String foodDescription;
+
+  const PantryItem({
+    required this.foodItemID,
+    required this.foodName,
+    required this.foodType,
+    required this.foodQuantity,
+    required this.foodStockStatus,
+    this.foodDescription = '',
+  });
+
+  bool get isInStock => foodQuantity > 0;
+
+  String get displayStockStatus => isInStock ? 'In Stock' : 'Out of Stock';
+
+  String get displayQuantity => foodQuantity > 99 ? '99+' : '$foodQuantity';
+
+  static String stockStatusForQuantity(int quantity) {
+    return quantity > 0 ? pantryInStock : pantryOutOfStock;
+  }
+
+  factory PantryItem.fromMap(String foodItemID, Map<String, dynamic> data) {
+    final quantity = data['foodQuantity'] as int? ?? 0;
+
+    return PantryItem(
+      foodItemID: foodItemID,
+      foodName: data['foodName'] as String? ?? '',
+      foodType: data['foodType'] as String? ?? 'Other',
+      foodQuantity: quantity,
+      foodStockStatus: stockStatusForQuantity(quantity),
+      foodDescription: data['foodDescription'] as String? ?? '',
+    );
+  }
+
+  PantryItem copyWith({
+    String? foodName,
+    String? foodType,
+    int? foodQuantity,
+    String? foodDescription,
+  }) {
+    final newQuantity = foodQuantity ?? this.foodQuantity;
+
+    return PantryItem(
+      foodItemID: foodItemID,
+      foodName: foodName ?? this.foodName,
+      foodType: foodType ?? this.foodType,
+      foodQuantity: newQuantity,
+      foodStockStatus: stockStatusForQuantity(newQuantity),
+      foodDescription: foodDescription ?? this.foodDescription,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'foodName': foodName,
+    'foodType': foodType,
+    'foodQuantity': foodQuantity,
+    'foodStockStatus': stockStatusForQuantity(foodQuantity),
+    'foodDescription': foodDescription,
+  };
+}
+
 class LowStockItem {
   final String name;
   final String category;
