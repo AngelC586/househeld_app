@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-
+import 'package:househeld_app/screens/stuff_screen.dart';
 import '../models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/task_row_card.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import 'task_form_screen.dart';
+import 'stuff_screen.dart';
+
 
 enum _SortField { title, assignee }
 
@@ -21,7 +23,7 @@ class _TasksScreenState extends State<TasksScreen> {
   final String _currentUserRole = 'member';
   final String _currentUserID = 'u2';
 
-  final List<HouseholdTask> _tasks = [];
+  List<HouseholdTask> _tasks = [];
 
   _SortField _sortField = _SortField.title;
   _SortDirection _sortDirection = _SortDirection.asc;
@@ -33,28 +35,20 @@ class _TasksScreenState extends State<TasksScreen> {
     final sorted = [...list];
     switch (_sortField) {
       case _SortField.title:
-        sorted.sort(
-          (a, b) =>
-              a.taskName.toLowerCase().compareTo(b.taskName.toLowerCase()),
-        );
+        sorted.sort((a, b) => a.taskName.toLowerCase().compareTo(b.taskName.toLowerCase()));
         break;
       case _SortField.assignee:
-        sorted.sort(
-          (a, b) => a.createdByMemberID.compareTo(b.createdByMemberID),
-        );
+        sorted.sort((a, b) => a.createdByMemberID.compareTo(b.createdByMemberID));
         break;
     }
-    return _sortDirection == _SortDirection.asc
-        ? sorted
-        : sorted.reversed.toList();
+    return _sortDirection == _SortDirection.asc ? sorted : sorted.reversed.toList();
   }
 
   void _pickSort(_SortField field) {
     setState(() {
       if (_sortField == field) {
-        _sortDirection = _sortDirection == _SortDirection.asc
-            ? _SortDirection.desc
-            : _SortDirection.asc;
+        _sortDirection =
+            _sortDirection == _SortDirection.asc ? _SortDirection.desc : _SortDirection.asc;
       } else {
         _sortField = field;
         _sortDirection = _SortDirection.asc;
@@ -67,10 +61,7 @@ class _TasksScreenState extends State<TasksScreen> {
       final i = _tasks.indexWhere((t) => t.taskId == task.taskId);
       _tasks[i] = task.isCompleted
           ? task.copyWith(taskStatus: 'pending', completedByMemberID: null)
-          : task.copyWith(
-              taskStatus: 'completed',
-              completedByMemberID: _currentUserID,
-            );
+          : task.copyWith(taskStatus: 'completed', completedByMemberID: _currentUserID);
     });
   }
 
@@ -111,8 +102,7 @@ class _TasksScreenState extends State<TasksScreen> {
     final result = await Navigator.push<HouseholdTask>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            TaskFormScreen(currentUserID: _currentUserID, existingTask: task),
+        builder: (_) => TaskFormScreen(currentUserID: _currentUserID, existingTask: task),
       ),
     );
     if (result != null) {
@@ -139,9 +129,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 task.isCompleted ? Icons.undo : Icons.check_circle_outline,
                 color: AppColors.forest,
               ),
-              title: Text(
-                task.isCompleted ? 'Mark Incomplete' : 'Mark Completed',
-              ),
+              title: Text(task.isCompleted ? 'Mark Incomplete' : 'Mark Completed'),
               onTap: () async {
                 Navigator.pop(context); // close the sheet first
                 final confirmed = await _confirm(
@@ -171,9 +159,7 @@ class _TasksScreenState extends State<TasksScreen> {
                   'This will permanently remove "${task.taskName}".',
                 );
                 if (confirmed) {
-                  setState(
-                    () => _tasks.removeWhere((t) => t.taskId == task.taskId),
-                  );
+                  setState(() => _tasks.removeWhere((t) => t.taskId == task.taskId));
                 }
               },
             ),
@@ -210,10 +196,7 @@ class _TasksScreenState extends State<TasksScreen> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppColors.line),
             ),
-            child: Text(
-              'Only Managers & Members can add tasks.',
-              style: AppText.bodySoft,
-            ),
+            child: Text('Only Managers & Members can add tasks.', style: AppText.bodySoft),
           ),
         ],
       ],
@@ -223,9 +206,7 @@ class _TasksScreenState extends State<TasksScreen> {
   @override
   Widget build(BuildContext context) {
     final allTasks = _tasks;
-    final assignedTasks = _tasks
-        .where((t) => t.createdByMemberID == _currentUserID)
-        .toList();
+    final assignedTasks = _tasks.where((t) => t.createdByMemberID == _currentUserID).toList();
     final finishedTasks = _tasks.where((t) => t.isCompleted).toList();
 
     return DefaultTabController(
@@ -245,8 +226,8 @@ class _TasksScreenState extends State<TasksScreen> {
               tooltip: 'Sort',
               onSelected: _pickSort,
               itemBuilder: (context) => [
-                _sortMenuItem(_SortField.title, 'Title'),
-                _sortMenuItem(_SortField.assignee, 'Assignee'),
+                 _sortMenuItem(_SortField.title, 'Title'),
+                 _sortMenuItem(_SortField.assignee, 'Assignee'),
               ],
             ),
             IconButton(
@@ -289,11 +270,13 @@ class _TasksScreenState extends State<TasksScreen> {
           onTap: (i) {
             if (i == 1) return; // already on Tasks
             if (i == 0) {
-              Navigator.pop(context); // back to Home
+              Navigator.popUntil(context, (route) => route.isFirst); // back to Home
               return;
             }
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('Coming soon')));
+            if (i == 3) {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const StuffScreen()));
+              return;
+            }    
           },
         ),
       ),
@@ -309,9 +292,7 @@ class _TasksScreenState extends State<TasksScreen> {
       value: field,
       child: Text(
         '$label$arrow',
-        style: TextStyle(
-          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-        ),
+        style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal),
       ),
     );
   }

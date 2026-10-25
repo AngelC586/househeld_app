@@ -9,6 +9,7 @@ import '../widgets/stat_card.dart';
 import '../widgets/task_row_card.dart';
 import '../widgets/zero_state.dart';
 import 'tasks_screen.dart';
+import 'stuff_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -165,6 +166,10 @@ class _HomeScreenState extends State<HomeScreen> {
             );
             return;
           }
+          if(i == 3){
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const StuffScreen()));
+              return;
+            }
         },
       ),
     );
