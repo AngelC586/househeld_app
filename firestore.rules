@@ -144,10 +144,14 @@ service cloud.firestore {
         allow create: if signedIn()
           && memberID == request.auth.uid
           && request.resource.data.keys().hasOnly([
-            'userID', 'householdID', 'memberRole'
+            'userID', 'householdID', 'memberRole', 'displayName'
           ])
           && request.resource.data.userID == request.auth.uid
           && request.resource.data.householdID == householdID
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName == getAfter(
+            /databases/$(database)/documents/users/$(request.auth.uid)
+          ).data.displayName
           && (
             (
               request.resource.data.memberRole == 'manager'
@@ -218,29 +222,157 @@ service cloud.firestore {
       }
 
       match /tasks/{taskID} {
-        allow read: if isMember(householdID);
+        // Read the actual role from this household's membership.
+        function taskMemberRole() {
+          return get(
+            /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+          ).data.memberRole;
+        }
 
-        allow create: if isMember(householdID)
-          && request.resource.data.keys().hasOnly([
-            'taskName', 'taskDescription', 'taskStatus',
-            'createdByMemberID'
-          ])
-          && request.resource.data.taskName is string
-          && request.resource.data.taskName.size() > 0
-          && request.resource.data.taskName.size() <= 200
-          && request.resource.data.taskDescription is string
+        function canManageTasks() {
+          return taskMemberRole() in ['manager', 'member'];
+        }
+
+        function canViewTask(data) {
+          let role = taskMemberRole();
+
+          return role in ['manager', 'member', 'child']
+            && (
+              role == 'manager'
+              || data.taskAssignedMemberIDs == []
+              || data.createdByMemberID == request.auth.uid
+              || request.auth.uid in data.taskAssignedMemberIDs
+            );
+        }
+
+        // Check one selected assignee, if that position exists.
+        function validAssigneeAt(ids, index) {
+          return ids.size() <= index
+            || (
+              ids[index] is string
+              && ids[index].size() > 0
+              && !ids[index].matches('.*[/].*')
+              && exists(
+                /databases/$(database)/documents/households/$(householdID)/members/$(ids[index])
+              )
+            );
+        }
+
+        function validAssignees(ids) {
+          return ids is list
+            && ids.size() <= 8
+            && ids.toSet().size() == ids.size()
+            && validAssigneeAt(ids, 0)
+            && validAssigneeAt(ids, 1)
+            && validAssigneeAt(ids, 2)
+            && validAssigneeAt(ids, 3)
+            && validAssigneeAt(ids, 4)
+            && validAssigneeAt(ids, 5)
+            && validAssigneeAt(ids, 6)
+            && validAssigneeAt(ids, 7);
+        }
+
+        // Validate the complete task document.
+        function validTask(data) {
+          let fields = [
+            'taskName',
+            'taskDescription',
+            'taskStatus',
+            'createdByMemberID',
+            'completedByMemberID',
+            'taskCompletionTime',
+            'taskAssignedMemberIDs'
+          ];
+
+          return data.keys().hasAll(fields)
+            && data.keys().hasOnly(fields)
+            && data.taskName is string
+            && data.taskName.size() > 0
+            && data.taskName.size() <= 200
+            && data.taskDescription is string
+            && data.createdByMemberID is string
+            && data.createdByMemberID.size() > 0
+            && data.taskAssignedMemberIDs is list
+            && data.taskAssignedMemberIDs.size() <= 8
+            && (
+              data.taskCompletionTime == null
+              || data.taskCompletionTime is timestamp
+            )
+            && (
+              (
+                data.taskStatus == 'pending'
+                && data.completedByMemberID == null
+                && data.taskCompletionTime == null
+              )
+              || (
+                data.taskStatus == 'completed'
+                && data.completedByMemberID is string
+                && data.completedByMemberID.size() > 0
+              )
+            );
+        }
+
+        // Editing cannot change the creator or completion details.
+        function validTaskEdit() {
+          let changes = request.resource.data.diff(resource.data)
+            .affectedKeys();
+
+          return canManageTasks()
+            && changes.hasOnly([
+              'taskName',
+              'taskDescription',
+              'taskAssignedMemberIDs'
+            ])
+            && (
+              !changes.hasAny(['taskAssignedMemberIDs'])
+              || (
+                resource.data.createdByMemberID == request.auth.uid
+                && validAssignees(
+                  request.resource.data.taskAssignedMemberIDs
+                )
+              )
+            );
+        }
+
+        function validTaskCompletion() {
+          return resource.data.taskStatus == 'pending'
+            && request.resource.data.taskStatus == 'completed'
+            && request.resource.data.completedByMemberID
+                == request.auth.uid
+            && request.resource.data.diff(resource.data)
+                .affectedKeys().hasOnly([
+                  'taskStatus',
+                  'completedByMemberID'
+                ])
+            && (
+              resource.data.taskAssignedMemberIDs == []
+              || request.auth.uid in resource.data.taskAssignedMemberIDs
+            );
+        }
+
+        allow read: if signedIn()
+          && canViewTask(resource.data);
+
+        allow create: if signedIn()
+          && canManageTasks()
+          && validTask(request.resource.data)
           && request.resource.data.taskStatus == 'pending'
-          && request.resource.data.createdByMemberID == request.auth.uid;
+          && request.resource.data.createdByMemberID == request.auth.uid
+          && validAssignees(
+            request.resource.data.taskAssignedMemberIDs
+          );
 
-        allow update: if isMember(householdID)
-          && resource.data.taskStatus == 'pending'
-          && request.resource.data.diff(resource.data)
-              .affectedKeys().hasOnly([
-                'taskStatus', 'completedByMemberID', 'taskCompletionTime'
-              ])
-          && request.resource.data.taskStatus == 'completed'
-          && request.resource.data.completedByMemberID == request.auth.uid
-          && request.resource.data.taskCompletionTime == request.time;
+        allow update: if signedIn()
+          && canViewTask(resource.data)
+          && validTask(request.resource.data)
+          && (
+            validTaskEdit()
+            || validTaskCompletion()
+          );
+
+        allow delete: if signedIn()
+          && canManageTasks()
+          && canViewTask(resource.data);
       }
 
       match /pantryItems/{foodItemID} {

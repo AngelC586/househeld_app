@@ -161,18 +161,42 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (i) {
           if (i == 0) return;
           if (i == 1) {
+            final householdID = widget.userProfile.householdID;
+
+            if (householdID == null || householdID.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Please create or join a household before opening tasks.',
+                  ),
+                ),
+              );
+              return;
+            }
+
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const TasksScreen()),
+              MaterialPageRoute(
+                builder: (_) => TasksScreen(householdID: householdID),
+              ),
             );
             return;
           }
           if (i == 2) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const PantryScreen()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PantryScreen()),
+            );
             return;
           }
           if (i == 3) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const StuffScreen()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    StuffScreen(householdID: widget.userProfile.householdID!),
+              ),
+            );
             return;
           }
         },

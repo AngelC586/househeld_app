@@ -7,12 +7,14 @@ class TaskRowCard extends StatelessWidget {
   final VoidCallback onToggle;
 
   final VoidCallback? onMenu;
+  final String? creatorName;
 
   const TaskRowCard({
     super.key,
     required this.task,
     required this.onToggle,
     this.onMenu,
+    this.creatorName,
   });
 
   @override
@@ -63,14 +65,11 @@ class TaskRowCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  // DATABASE.md's task schema has no due-date field — only
-                  // who created it and (once done) who completed it. Shows
-                  // the description if there is one, otherwise falls back
-                  // to the creator's UID.
+                  // Show the description, or the creator's display name.
                   Text(
                     task.taskDescription.isNotEmpty
                         ? task.taskDescription
-                        : 'Created by ${task.createdByMemberID}',
+                        : 'Created by ${creatorName ?? 'a household member'}',
                     style: AppText.bodySoft,
                     overflow: TextOverflow.ellipsis,
                   ),

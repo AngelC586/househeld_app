@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class UserProfile {
   final String uid;
   final String username;
@@ -59,11 +61,13 @@ class HouseholdMember {
   final String userID; // matches the signed-in user's UID
   final String householdID;
   final String memberRole;
+  final String displayName;
 
   const HouseholdMember({
     required this.userID,
     required this.householdID,
     required this.memberRole,
+    this.displayName = '',
   });
 
   factory HouseholdMember.fromMap(Map<String, dynamic> data) {
@@ -71,6 +75,7 @@ class HouseholdMember {
       userID: data['userID'] as String? ?? '',
       householdID: data['householdID'] as String? ?? '',
       memberRole: data['memberRole'] as String? ?? 'member',
+      displayName: data['displayName'] as String? ?? '',
     );
   }
 
@@ -78,6 +83,7 @@ class HouseholdMember {
     'userID': userID,
     'householdID': householdID,
     'memberRole': memberRole,
+    'displayName': displayName,
   };
 }
 
@@ -101,6 +107,9 @@ class HouseholdTask {
   final String? completedByMemberID;
   final DateTime? taskCompletionTime;
 
+  // An empty list means that the task is assigned to Anyone
+  final List<String> taskAssignedMemberIDs;
+
   const HouseholdTask({
     required this.taskId,
     required this.taskName,
@@ -109,9 +118,32 @@ class HouseholdTask {
     required this.createdByMemberID,
     this.completedByMemberID,
     this.taskCompletionTime,
+    this.taskAssignedMemberIDs = const [],
   });
 
   bool get isCompleted => taskStatus == 'completed';
+
+  bool get isAssignedToAnyone => taskAssignedMemberIDs.isEmpty;
+
+  bool isAssignedTo(String memberID) {
+    return taskAssignedMemberIDs.contains(memberID);
+  }
+
+  // Call these helpers only for a verified household member
+  bool canView({
+    required String memberID,
+    required String memberRole,
+  }) {
+    return isAssignedToAnyone || createdByMemberID == memberID || isAssignedTo(memberID) || memberRole == 'manager';
+  }
+
+  bool canComplete(String memberID) {
+    return !isCompleted && (isAssignedToAnyone || isAssignedTo(memberID));
+  }
+
+  bool canChangeAssignees(String memberID) {
+    return createdByMemberID == memberID;
+  }
 
   HouseholdTask copyWith({
     String? taskName,
@@ -119,6 +151,8 @@ class HouseholdTask {
     String? taskStatus,
     String? completedByMemberID,
     DateTime? taskCompletionTime,
+    List<String>? taskAssignedMemberIDs,
+    bool clearCompletion = false,
   }) {
     return HouseholdTask(
       taskId: taskId,
@@ -126,8 +160,9 @@ class HouseholdTask {
       taskDescription: taskDescription ?? this.taskDescription,
       taskStatus: taskStatus ?? this.taskStatus,
       createdByMemberID: createdByMemberID,
-      completedByMemberID: completedByMemberID ?? this.completedByMemberID,
-      taskCompletionTime: taskCompletionTime ?? this.taskCompletionTime,
+      completedByMemberID: clearCompletion ? null : (completedByMemberID ?? this.completedByMemberID),
+      taskCompletionTime: clearCompletion ? null : (taskCompletionTime ?? this.taskCompletionTime),
+      taskAssignedMemberIDs: List<String>.unmodifiable(taskAssignedMemberIDs ?? this.taskAssignedMemberIDs),
     );
   }
 
@@ -136,6 +171,9 @@ class HouseholdTask {
     'taskDescription': taskDescription,
     'taskStatus': 'pending',
     'createdByMemberID': createdByMemberID,
+    'completedByMemberID': null,
+    'taskCompletionTime': null,
+    'taskAssignedMemberIDs': List<String>.from(taskAssignedMemberIDs),
   };
 
   static Map<String, dynamic> completeMap(String completedByMemberID) => {
@@ -144,6 +182,8 @@ class HouseholdTask {
   };
 
   factory HouseholdTask.fromMap(String taskId, Map<String, dynamic> data) {
+    final completionTime = data['taskCompletionTime'];
+
     return HouseholdTask(
       taskId: taskId,
       taskName: data['taskName'] as String? ?? '',
@@ -151,6 +191,8 @@ class HouseholdTask {
       taskStatus: data['taskStatus'] as String? ?? 'pending',
       createdByMemberID: data['createdByMemberID'] as String? ?? '',
       completedByMemberID: data['completedByMemberID'] as String?,
+      taskCompletionTime: completionTime is Timestamp ? completionTime.toDate() : null,
+      taskAssignedMemberIDs: List<String>.unmodifiable(List<String>.from(data['taskAssignedMemberIDs'] as List? ?? const [],),),
     );
   }
 }
