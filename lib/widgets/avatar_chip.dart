@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 
-const _avatarColors = [
-  AppColors.mustard,
-  AppColors.forest,
-  AppColors.clay,
-];
+const _avatarColors = [AppColors.mustard, AppColors.forest, AppColors.clay];
 
 class AvatarChip extends StatelessWidget {
-  final DisplayMember member;
+  final HouseholdMember member;
   final bool showLabel;
-
-
   final int colorSeed;
 
   const AvatarChip({
@@ -22,6 +17,26 @@ class AvatarChip extends StatelessWidget {
     this.colorSeed = 0,
   });
 
+  String get _initial {
+    final name = member.displayName.trim();
+
+    if (name.isEmpty) return '?';
+
+    return name[0].toUpperCase();
+  }
+
+  String get _roleLabel {
+    switch (member.memberRole) {
+      case 'manager':
+        return 'Manager';
+      case 'child':
+        return 'Child';
+      case 'member':
+      default:
+        return 'Member';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = _avatarColors[colorSeed % _avatarColors.length];
@@ -29,7 +44,7 @@ class AvatarChip extends StatelessWidget {
       radius: 14,
       backgroundColor: color,
       child: Text(
-        member.initial,
+        _initial,
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
@@ -53,7 +68,7 @@ class AvatarChip extends StatelessWidget {
           avatar,
           const SizedBox(width: 6),
           Text(
-            '${member.profile.displayName} · ${member.membership.memberRole}',
+            '${member.displayName} · $_roleLabel',
             style: AppText.body.copyWith(fontSize: 12.5),
           ),
         ],

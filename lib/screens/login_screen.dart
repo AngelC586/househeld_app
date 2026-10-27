@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'registration_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.onBypass});
-
-  final VoidCallback? onBypass;
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -171,15 +169,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: openRegistrationScreen,
                   child: const Text('Don\'t have an account? Create one!'),
                 ),
-
-                // Debug mode; Must delete later
-                if (widget.onBypass != null) ...[
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: widget.onBypass,
-                    child: const Text('Skip Sign-In (Debug Mode)'),
-                  ),
-                ],
               ],
             ],
           ),

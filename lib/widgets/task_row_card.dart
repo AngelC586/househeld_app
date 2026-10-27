@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 
 class TaskRowCard extends StatelessWidget {
   final HouseholdTask task;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
 
   final VoidCallback? onMenu;
+  final String? creatorName;
 
   const TaskRowCard({
     super.key,
     required this.task,
     required this.onToggle,
     this.onMenu,
+    this.creatorName,
   });
 
   @override
@@ -56,21 +59,20 @@ class TaskRowCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w600,
-                      color: task.isCompleted ? AppColors.inkSoft : AppColors.ink,
+                      color: task.isCompleted
+                          ? AppColors.inkSoft
+                          : AppColors.ink,
                       decoration: task.isCompleted
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
                     ),
                   ),
                   const SizedBox(height: 3),
-                  // DATABASE.md's task schema has no due-date field — only
-                  // who created it and (once done) who completed it. Shows
-                  // the description if there is one, otherwise falls back
-                  // to the creator's UID.
+                  // Show the description, or the creator's display name.
                   Text(
                     task.taskDescription.isNotEmpty
                         ? task.taskDescription
-                        : 'Created by ${task.createdByMemberID}',
+                        : 'Created by ${creatorName ?? 'a household member'}',
                     style: AppText.bodySoft,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -79,7 +81,11 @@ class TaskRowCard extends StatelessWidget {
             ),
             if (onMenu != null)
               IconButton(
-                icon: const Icon(Icons.more_vert, size: 20, color: AppColors.inkSoft),
+                icon: const Icon(
+                  Icons.more_vert,
+                  size: 20,
+                  color: AppColors.inkSoft,
+                ),
                 onPressed: onMenu,
                 tooltip: 'Task options',
                 padding: EdgeInsets.zero,

@@ -82,6 +82,7 @@ class HouseholdService {
         'userID': user.uid,
         'householdID': householdRef.id,
         'memberRole': 'manager',
+        'displayName': userData['displayName'] as String? ?? '',
       });
 
       // Link the user's profile to their household.
@@ -179,6 +180,7 @@ class HouseholdService {
         'userID': user.uid,
         'householdID': id,
         'memberRole': 'member',
+        'displayName': userData['displayName'] as String? ?? '',
       });
 
       // Link the user's profile to the household.
@@ -196,5 +198,50 @@ class HouseholdService {
         },
       );
     });
+  }
+
+  // Listen for household members and their display names.
+  Stream<List<HouseholdMember>> watchMembers(String householdID) {
+    if (_auth.currentUser == null) {
+      return Stream<List<HouseholdMember>>.error(
+        StateError('Please sign in to view household members.'),
+      );
+    }
+
+    if (householdID.isEmpty || householdID.contains('/')) {
+      return Stream<List<HouseholdMember>>.error(
+        StateError('A valid household ID is required.'),
+      );
+    }
+
+    return _db
+        .collection('households')
+        .doc(householdID)
+        .collection('members')
+        .snapshots()
+        .map((snapshot) {
+          final members = snapshot.docs.map((document) {
+            final data = document.data();
+
+            return HouseholdMember(
+              userID: document.id,
+              householdID: householdID,
+              memberRole: data['memberRole'] as String? ?? 'member',
+              displayName: data['displayName'] as String? ?? '',
+            );
+          }).toList();
+
+          members.sort((a, b) {
+            final comparison = a.displayName.toLowerCase().compareTo(
+              b.displayName.toLowerCase(),
+            );
+
+            return comparison != 0
+                ? comparison
+                : a.userID.compareTo(b.userID);
+          });
+
+          return members;
+        });
   }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 
 class LowStockRow extends StatelessWidget {
-  final LowStockItem item;
-  final VoidCallback onAdd;
+  final PantryItem item;
+  final VoidCallback onOpen;
 
-  const LowStockRow({super.key, required this.item, required this.onAdd});
+  const LowStockRow({super.key, required this.item, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +25,7 @@ class LowStockRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.name,
+                  item.foodName,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -32,12 +33,15 @@ class LowStockRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text('${item.category} · out of stock', style: AppText.bodySoft),
+                Text(
+                  '${item.foodType} · out of stock',
+                  style: AppText.bodySoft,
+                ),
               ],
             ),
           ),
           TextButton(
-            onPressed: onAdd,
+            onPressed: onOpen,
             style: TextButton.styleFrom(
               backgroundColor: AppColors.surface,
               shape: RoundedRectangleBorder(
@@ -47,8 +51,11 @@ class LowStockRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             ),
             child: Text(
-              'Add →',
-              style: AppText.body.copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+              'View →',
+              style: AppText.body.copyWith(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

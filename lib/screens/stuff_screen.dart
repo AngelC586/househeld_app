@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stuff_item_row.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import 'tasks_screen.dart';
+import 'pantry_screen.dart';
 import 'stuff_item_form_screen.dart';
 
 enum _ListType { household, private }
 
 class StuffScreen extends StatefulWidget {
-  const StuffScreen({super.key});
+  const StuffScreen({super.key, required this.householdID});
+
+  final String householdID;
 
   @override
   State<StuffScreen> createState() => _StuffScreenState();
@@ -21,11 +25,10 @@ class _StuffScreenState extends State<StuffScreen> {
   _ListType _listType = _ListType.household;
   bool _sortAscending = true;
 
-  
-  List<StuffItem> _items = [
-  ];
+  final List<StuffItem> _items = [];
 
-  String get _listTypeString => _listType == _ListType.household ? 'household' : 'private';
+  String get _listTypeString =>
+      _listType == _ListType.household ? 'household' : 'private';
 
   void _updateStatus(StuffItem item, String newStatus) {
     setState(() {
@@ -41,8 +44,14 @@ class _StuffScreenState extends State<StuffScreen> {
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes'),
+          ),
         ],
       ),
     );
@@ -112,7 +121,9 @@ class _StuffScreenState extends State<StuffScreen> {
                   'This will permanently remove "${item.itemName}".',
                 );
                 if (confirmed) {
-                  setState(() => _items.removeWhere((x) => x.itemId == item.itemId));
+                  setState(() {
+                    _items.removeWhere((x) => x.itemId == item.itemId);
+                  });
                 }
               },
             ),
@@ -122,13 +133,54 @@ class _StuffScreenState extends State<StuffScreen> {
     );
   }
 
+  // Screen navigation:
+  void _handleNav(int index) {
+    if (index == 3) return;
+
+    if (index == 0) {
+      Navigator.popUntil(context, (route) => route.isFirst);
+      return;
+    }
+
+    if (index == 1) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TasksScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 2) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PantryScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final visible = _items.where((i) {
-      if (_listType == _ListType.household) return i.listType == 'household';
-      return i.listType == 'private' && i.ownerMemberID == _currentUserID;
-    }).toList()
-      ..sort((a, b) => a.itemName.toLowerCase().compareTo(b.itemName.toLowerCase()));
+    final visible =
+        _items.where((i) {
+          if (_listType == _ListType.household) {
+            return i.listType == 'household';
+          }
+          return i.listType == 'private' && i.ownerMemberID == _currentUserID;
+        }).toList()..sort(
+          (a, b) =>
+              a.itemName.toLowerCase().compareTo(b.itemName.toLowerCase()),
+        );
 
     final sorted = _sortAscending ? visible : visible.reversed.toList();
 
@@ -143,7 +195,9 @@ class _StuffScreenState extends State<StuffScreen> {
         title: const Text('Stuff'),
         actions: [
           IconButton(
-            icon: Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
+            icon: Icon(
+              _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+            ),
             tooltip: _sortAscending ? 'Sort: A to Z' : 'Sort: Z to A',
             onPressed: () => setState(() => _sortAscending = !_sortAscending),
           ),
@@ -170,7 +224,8 @@ class _StuffScreenState extends State<StuffScreen> {
                     child: _toggleButton(
                       label: 'Household',
                       selected: _listType == _ListType.household,
-                      onTap: () => setState(() => _listType = _ListType.household),
+                      onTap: () =>
+                          setState(() => _listType = _ListType.household),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -178,7 +233,8 @@ class _StuffScreenState extends State<StuffScreen> {
                     child: _toggleButton(
                       label: 'Private (yours)',
                       selected: _listType == _ListType.private,
-                      onTap: () => setState(() => _listType = _ListType.private),
+                      onTap: () =>
+                          setState(() => _listType = _ListType.private),
                     ),
                   ),
                 ],
@@ -228,22 +284,16 @@ class _StuffScreenState extends State<StuffScreen> {
       ),
       bottomNavigationBar: HouseheldBottomNav(
         currentIndex: 3,
-        onTap: (i) {
-          if (i == 3) return; // already here
-          if (i == 0) {
-            Navigator.popUntil(context, (route) => route.isFirst); // back to Home
-            return;
-          }
-          if (i == 1) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const TasksScreen()));
-            return;
-          }
-        },
+        onTap: _handleNav,
       ),
     );
   }
 
-  Widget _toggleButton({required String label, required bool selected, required VoidCallback onTap}) {
+  Widget _toggleButton({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -251,7 +301,9 @@ class _StuffScreenState extends State<StuffScreen> {
         decoration: BoxDecoration(
           color: selected ? AppColors.forest : AppColors.surface,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: selected ? AppColors.forest : AppColors.line),
+          border: Border.all(
+            color: selected ? AppColors.forest : AppColors.line,
+          ),
         ),
         child: Text(
           label,
