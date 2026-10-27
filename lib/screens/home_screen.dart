@@ -8,6 +8,9 @@ import '../widgets/low_stock_row.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/task_row_card.dart';
 import '../widgets/zero_state.dart';
+import '../services/household_service.dart';
+import '../services/task_service.dart';
+import '../services/pantry_service.dart';
 import 'tasks_screen.dart';
 import 'stuff_screen.dart';
 import 'pantry_screen.dart';
@@ -31,175 +34,198 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final int _navIndex = 0;
 
-  //sample data to show what the home screen will look like
-  final List<DisplayMember> _members = const [
-    DisplayMember(
-      profile: UserProfile(
-        uid: 'u1',
-        username: 'ana',
-        email: 'ana@example.com',
-        displayName: 'Ana',
-      ),
-      membership: HouseholdMember(
-        userID: 'u1',
-        householdID: 'demo-household',
-        memberRole: 'manager',
-      ),
-    ),
-    DisplayMember(
-      profile: UserProfile(
-        uid: 'u2',
-        username: 'alex',
-        email: 'alex@example.com',
-        displayName: 'Alex',
-      ),
-      membership: HouseholdMember(
-        userID: 'u2',
-        householdID: 'demo-household',
-        memberRole: 'member',
-      ),
-    ),
-    DisplayMember(
-      profile: UserProfile(
-        uid: 'u3',
-        username: 'mira',
-        email: 'mira@example.com',
-        displayName: 'Mira',
-      ),
-      membership: HouseholdMember(
-        userID: 'u3',
-        householdID: 'demo-household',
-        memberRole: 'child',
-      ),
-    ),
-  ];
+  final HouseholdService _householdService = HouseholdService();
+  final TaskService _taskService = TaskService();
+  final PantryService _pantryService = PantryService();
 
-  final List<HouseholdTask> _tasks = [
-    const HouseholdTask(
-      taskId: 't1',
-      taskName: 'Take out recycling',
-      taskStatus: 'completed',
-      createdByMemberID: 'u1',
-      completedByMemberID: 'u2',
-    ),
-    const HouseholdTask(
-      taskId: 't2',
-      taskName: 'Water the plants',
-      taskStatus: 'pending',
-      createdByMemberID: 'u1',
-    ),
-    const HouseholdTask(
-      taskId: 't3',
-      taskName: 'Vacuum living room',
-      taskStatus: 'pending',
-      createdByMemberID: 'u2',
-    ),
-  ];
+  // Screen navigation:
+  void _handleNav(int index) {
+    if (index == 0) return;
 
-  final List<LowStockItem> _lowStock = const [
-    LowStockItem(name: 'Eggs', category: 'Food'),
-    LowStockItem(name: 'Dish soap', category: 'Personal'),
-  ];
+    final householdID = widget.userProfile.householdID;
 
-  final List<ActivityEntry> _activity = const [
-    ActivityEntry(text: 'Alex completed Take out recycling', time: '2hrs ago'),
-    ActivityEntry(
-      text: 'Ana restocked Milk',
-      time: 'yesterday',
-      isRestock: true,
-    ),
-  ];
-
-  void _toggleTask(HouseholdTask task) {
-    setState(() {
-      final i = _tasks.indexWhere((t) => t.taskId == task.taskId);
-      _tasks[i] = task.isCompleted
-          ? task.copyWith(taskStatus: 'pending', completedByMemberID: null)
-          : task.copyWith(
-              taskStatus: 'completed',
-              completedByMemberID: 'u1' /* */,
-            );
-    });
-  }
-
-  void _addToGroceryList(LowStockItem item) {
-    setState(() {
-      _lowStock.remove(item);
-      _activity.insert(
-        0,
-        ActivityEntry(
-          text: 'Marked ${item.name} empty',
-          time: 'just now',
-          isRestock: true,
+    // Cannot access screens if not signed in:
+    if (householdID == null || householdID.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Unable to open this feature because no household is available.',
+          ),
         ),
       );
-    });
+      return;
+    }
+
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TasksScreen(householdID: householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 2) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PantryScreen(householdID: householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 3) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StuffScreen(householdID: householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      );
+    }
   }
 
-  bool get _allCaughtUp =>
-      _tasks.every((t) => t.isCompleted) && _lowStock.isEmpty;
+  // Get household members:
+  HouseholdMember? _findCurrentMember(List<HouseholdMember> members) {
+    for (final member in members) {
+      if (member.userID == widget.userProfile.uid) {
+        return member;
+      }
+    }
+
+    return null;
+  }
+
+  String? _memberName(List<HouseholdMember> members, String memberID) {
+    for (final member in members) {
+      if (member.userID == memberID) {
+        final name = member.displayName.trim();
+
+        return name.isEmpty ? null : name;
+      }
+    }
+
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final householdID = widget.userProfile.householdID;
+
+    if (householdID == null || householdID.isEmpty) {
+      return Scaffold(
+        body: const Center(child: Text('Unable to load household data.')),
+        bottomNavigationBar: HouseheldBottomNav(
+          currentIndex: _navIndex,
+          onTap: _handleNav,
+        ),
+      );
+    }
+
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
             _buildHeader(),
+
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: _allCaughtUp ? _buildZeroState() : _buildNormalState(),
+              child: StreamBuilder<List<HouseholdMember>>(
+                stream: _householdService.watchMembers(householdID),
+                builder: (context, membersSnapshot) {
+                  if (membersSnapshot.hasError) {
+                    return _buildLoadError('Unable to load household members.');
+                  }
+
+                  if (!membersSnapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final members = membersSnapshot.data!;
+
+                  final currentMember = _findCurrentMember(members);
+
+                  if (currentMember == null) {
+                    return _buildLoadError(
+                      'Your household membership could not be verified.',
+                    );
+                  }
+
+                  return StreamBuilder<List<HouseholdTask>>(
+                    stream: _taskService.watchTasks(
+                      householdID: householdID,
+                      memberRole: currentMember.memberRole,
+                    ),
+                    builder: (context, tasksSnapshot) {
+                      if (tasksSnapshot.hasError) {
+                        return _buildLoadError(
+                          'Unable to load household tasks.',
+                        );
+                      }
+
+                      if (!tasksSnapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      return StreamBuilder<List<PantryItem>>(
+                        stream: _pantryService.watchPantryItems(householdID),
+                        builder: (context, pantrySnapshot) {
+                          if (pantrySnapshot.hasError) {
+                            return _buildLoadError(
+                              'Unable to load Pantry items.',
+                            );
+                          }
+
+                          if (!pantrySnapshot.hasData) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+
+                          return SingleChildScrollView(
+                            padding: const EdgeInsets.all(20),
+                            child: _buildDashboard(
+                              members: members,
+                              tasks: tasksSnapshot.data!,
+                              pantryItems: pantrySnapshot.data!,
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
+
       bottomNavigationBar: HouseheldBottomNav(
         currentIndex: _navIndex,
-        onTap: (i) {
-          if (i == 0) return;
-          if (i == 1) {
-            final householdID = widget.userProfile.householdID;
+        onTap: _handleNav,
+      ),
+    );
+  }
 
-            if (householdID == null || householdID.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Please create or join a household before opening tasks.',
-                  ),
-                ),
-              );
-              return;
-            }
-
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => TasksScreen(householdID: householdID),
-              ),
-            );
-            return;
-          }
-          if (i == 2) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PantryScreen()),
-            );
-            return;
-          }
-          if (i == 3) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    StuffScreen(householdID: widget.userProfile.householdID!),
-              ),
-            );
-            return;
-          }
-        },
+  // Handle build errors:
+  Widget _buildLoadError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsetsGeometry.all(24),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: AppText.bodySoft,
+        ),
       ),
     );
   }
@@ -248,81 +274,85 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildNormalState() {
-    final dueCount = _tasks.where((t) => !t.isCompleted).length;
+  Widget _buildDashboard({
+    required List<HouseholdMember> members,
+    required List<HouseholdTask> tasks,
+    required List<PantryItem> pantryItems,
+  }) {
+    final pendingTasks = tasks.where((task) => !task.isCompleted).toList();
+
+    final outOfStockItems = pantryItems
+        .where((item) => !item.isInStock)
+        .toList();
+
+    final allCaughtUp = pendingTasks.isEmpty && outOfStockItems.isEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            StatCard(number: '$dueCount', label: 'tasks due today'),
+            StatCard(number: '${pendingTasks.length}', label: 'tasks pending'),
             const SizedBox(width: 10),
-            StatCard(number: '${_lowStock.length}', label: 'items low'),
+            StatCard(number: '${outOfStockItems.length}', label: 'items out'),
           ],
         ),
+
         const SizedBox(height: 22),
+
         Text('HOUSEHOLD', style: AppText.label),
+
         const SizedBox(height: 8),
+
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (var i = 0; i < _members.length; i++)
-              AvatarChip(member: _members[i], colorSeed: i),
+            for (var i = 0; i < members.length; i++)
+              AvatarChip(member: members[i], colorSeed: i),
           ],
         ),
-        const SizedBox(height: 22),
-        Text('DUE TODAY', style: AppText.label),
-        const SizedBox(height: 8),
-        ..._tasks
-            .where((t) => !t.isCompleted)
-            .take(3)
-            .map((t) => TaskRowCard(task: t, onToggle: () => _toggleTask(t))),
-        if (_tasks.where((t) => !t.isCompleted).isEmpty)
-          Text('No tasks due today.', style: AppText.bodySoft),
-        const SizedBox(height: 14),
-        Text('RUNNING LOW', style: AppText.label),
-        const SizedBox(height: 8),
-        ..._lowStock.map(
-          (item) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: LowStockRow(
-              item: item,
-              onAdd: () => _addToGroceryList(item),
-            ),
-          ),
-        ),
-        if (_lowStock.isEmpty)
-          Text('Nothing running low.', style: AppText.bodySoft),
-      ],
-    );
-  }
 
-  Widget _buildZeroState() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CelebrateCard(
-          streakDays: 4,
-          tasksThisWeek: _tasks.where((t) => t.isCompleted).length,
-        ),
-        const SizedBox(height: 18),
-        Text('RECENT ACTIVITY', style: AppText.label),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.line),
-          ),
-          child: Column(
-            children: _activity
-                .take(5)
-                .map((a) => ActivityFeedRow(entry: a))
-                .toList(),
-          ),
-        ),
+        const SizedBox(height: 22),
+
+        if (allCaughtUp) ...[
+          const CelebrateCard(),
+        ] else ...[
+          Text('PENDING TASKS', style: AppText.label),
+
+          const SizedBox(height: 8),
+
+          for (final task in pendingTasks.take(3))
+            TaskRowCard(
+              task: task,
+              creatorName: _memberName(members, task.createdByMemberID),
+              onToggle: null,
+            ),
+
+          if (pendingTasks.isEmpty)
+            Text('No pending tasks.', style: AppText.bodySoft),
+
+          if (pendingTasks.length > 3)
+            TextButton(
+              onPressed: () => _handleNav(1),
+              child: const Text('View all tasks →'),
+            ),
+
+          const SizedBox(height: 14),
+
+          Text('OUT OF STOCK', style: AppText.label),
+
+          const SizedBox(height: 8),
+
+          for (final item in outOfStockItems)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: LowStockRow(item: item, onOpen: () => _handleNav(2)),
+            ),
+
+          if (outOfStockItems.isEmpty)
+            Text('Nothing is out of stock.', style: AppText.bodySoft),
+        ],
       ],
     );
   }

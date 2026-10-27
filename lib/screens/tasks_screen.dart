@@ -10,6 +10,8 @@ import '../theme/app_theme.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import '../widgets/task_row_card.dart';
 import 'task_form_screen.dart';
+import 'pantry_screen.dart';
+import 'stuff_screen.dart';
 
 enum _SortField { title, assignee }
 
@@ -449,7 +451,9 @@ class _TasksScreenState extends State<TasksScreen> {
                 .map((member) => member.displayName.trim())
                 .where((name) => name.isNotEmpty)
                 .firstOrNull,
-            onToggle: () => _completeTask(task),
+            onToggle: task.canComplete(_currentUserID)
+                ? () => _completeTask(task)
+                : null,
             onMenu: () => _showTaskMenu(task),
           ),
           Padding(
@@ -467,6 +471,42 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
       ],
     );
+  }
+
+  //Screen navigation:
+  void _handleNav(int index) {
+    if (index == 1) return;
+
+    if (index == 0) {
+      Navigator.popUntil(context, (route) => route.isFirst);
+      return;
+    }
+
+    if (index == 2) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PantryScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 3) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StuffScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      );
+    }
   }
 
   @override
@@ -581,16 +621,7 @@ class _TasksScreenState extends State<TasksScreen> {
             : null,
         bottomNavigationBar: HouseheldBottomNav(
           currentIndex: 1,
-          onTap: (i) {
-            if (i == 1) return;
-            if (i == 0) {
-              Navigator.pop(context);
-              return;
-            }
-
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('Coming soon')));
-          },
+          onTap: _handleNav,
         ),
       ),
     );

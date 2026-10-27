@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models.dart';
 
+// Allows created pantry items to be saved to the database:
 class PantryService {
   final FirebaseFirestore _db;
 
@@ -116,6 +117,7 @@ class PantryService {
     await batch.commit();
   }
 
+  // When a pantry item gets updated, so does its linked grocery item:
   Future<void> _updateLinkedGroceryDescriptions({
     required String householdID,
     required PantryItem item,
@@ -151,6 +153,7 @@ class PantryService {
     }
   }
 
+  // Method for allowing a pantry item to get added to a grocery list:
   Future<void> addToDefaultGroceryList({
     required String householdID,
     required PantryItem pantryItem,
@@ -173,6 +176,7 @@ class PantryService {
     await _db.runTransaction((transaction) async {
       final existing = await transaction.get(groceryItemRef);
 
+      // If the item is already in a grocery list, update quantity:
       if (existing.exists) {
         final currentQuantity =
             existing.data()?['groceryItemQuantity'] as int? ?? 0;

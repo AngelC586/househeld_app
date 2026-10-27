@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 
 class TaskRowCard extends StatelessWidget {
   final HouseholdTask task;
-  final VoidCallback onToggle;
+  final VoidCallback? onToggle;
 
   final VoidCallback? onMenu;
   final String? creatorName;
@@ -58,7 +59,9 @@ class TaskRowCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w600,
-                      color: task.isCompleted ? AppColors.inkSoft : AppColors.ink,
+                      color: task.isCompleted
+                          ? AppColors.inkSoft
+                          : AppColors.ink,
                       decoration: task.isCompleted
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
@@ -78,7 +81,11 @@ class TaskRowCard extends StatelessWidget {
             ),
             if (onMenu != null)
               IconButton(
-                icon: const Icon(Icons.more_vert, size: 20, color: AppColors.inkSoft),
+                icon: const Icon(
+                  Icons.more_vert,
+                  size: 20,
+                  color: AppColors.inkSoft,
+                ),
                 onPressed: onMenu,
                 tooltip: 'Task options',
                 padding: EdgeInsets.zero,

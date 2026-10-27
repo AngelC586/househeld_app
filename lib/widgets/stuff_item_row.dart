@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 
@@ -57,7 +58,11 @@ class StuffItemRow extends StatelessWidget {
           children: [
             for (final status in _allStatuses)
               ListTile(
-                leading: Icon(Icons.circle, size: 12, color: stuffStatusColor(status)),
+                leading: Icon(
+                  Icons.circle,
+                  size: 12,
+                  color: stuffStatusColor(status),
+                ),
                 title: Text(stuffStatusLabel(status)),
                 trailing: item.itemStatus == status
                     ? const Icon(Icons.check, color: AppColors.forest)
@@ -115,9 +120,12 @@ class StuffItemRow extends StatelessWidget {
             GestureDetector(
               onTap: () => _pickStatus(context),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: color),
                 ),
@@ -126,7 +134,11 @@ class StuffItemRow extends StatelessWidget {
                   children: [
                     Text(
                       stuffStatusLabel(item.itemStatus),
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: color),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
                     ),
                     Icon(Icons.arrow_drop_down, size: 16, color: color),
                   ],
@@ -135,7 +147,11 @@ class StuffItemRow extends StatelessWidget {
             ),
             if (onMenu != null)
               IconButton(
-                icon: const Icon(Icons.more_vert, size: 20, color: AppColors.inkSoft),
+                icon: const Icon(
+                  Icons.more_vert,
+                  size: 20,
+                  color: AppColors.inkSoft,
+                ),
                 onPressed: onMenu,
                 tooltip: 'Item options',
                 padding: EdgeInsets.zero,

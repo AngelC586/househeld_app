@@ -201,6 +201,55 @@ service cloud.firestore {
       }
 
       match /groceryLists/{groceryListID} {
+        function validGroceryItem(data) {
+          return data.keys().hasAll([
+              'groceryItemName',
+              'groceryItemType',
+              'groceryItemQuantity',
+              'groceryItemStatus',
+              'groceryItemDescription',
+              'sourceFoodItemID',
+              'sourceHouseholdItemID'
+            ])
+            && data.keys().hasOnly([
+              'groceryItemName',
+              'groceryItemType',
+              'groceryItemQuantity',
+              'groceryItemStatus',
+              'groceryItemDescription',
+              'sourceFoodItemID',
+              'sourceHouseholdItemID'
+            ])
+            && data.groceryItemName is string
+            && data.groceryItemName.size() > 0
+            && data.groceryItemType is string
+            && data.groceryItemQuantity is int
+            && data.groceryItemQuantity > 0
+            && data.groceryItemDescription is string
+            && data.groceryItemStatus in [
+              'unpurchased',
+              'purchased'
+            ]
+            && (
+                  data.sourceFoodItemID == null
+                  || (
+                    data.sourceFoodItemID is string
+                    && data.sourceFoodItemID.size() > 0
+                  )
+                )
+            && (
+                  data.sourceHouseholdItemID == null
+                  || (
+                    data.sourceHouseholdItemID is string
+                    && data.sourceHouseholdItemID.size() > 0
+                  )
+                )
+            && !(
+              data.sourceFoodItemID != null
+              && data.sourceHouseholdItemID != null
+            );
+        }
+        
         allow read: if isMember(householdID);
 
         allow create: if groceryListID == 'default'
@@ -215,7 +264,15 @@ service cloud.firestore {
         match /items/{groceryItemID} {
           allow read: if isMember(householdID);
 
-          allow create, update: if isMember(householdID);
+          allow create: if isMember(householdID)
+            && validGroceryItem(
+              request.resource.data
+            );
+
+          allow update: if isMember(householdID)
+            && validGroceryItem(
+              request.resource.data
+            );
 
           allow delete: if isMember(householdID);
         }
@@ -339,10 +396,13 @@ service cloud.firestore {
             && request.resource.data.taskStatus == 'completed'
             && request.resource.data.completedByMemberID
                 == request.auth.uid
+            && request.resource.data.taskCompletionTime
+                == request.time
             && request.resource.data.diff(resource.data)
                 .affectedKeys().hasOnly([
                   'taskStatus',
-                  'completedByMemberID'
+                  'completedByMemberID',
+                  'taskCompletionTime'
                 ])
             && (
               resource.data.taskAssignedMemberIDs == []

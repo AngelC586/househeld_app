@@ -130,11 +130,11 @@ class HouseholdTask {
   }
 
   // Call these helpers only for a verified household member
-  bool canView({
-    required String memberID,
-    required String memberRole,
-  }) {
-    return isAssignedToAnyone || createdByMemberID == memberID || isAssignedTo(memberID) || memberRole == 'manager';
+  bool canView({required String memberID, required String memberRole}) {
+    return isAssignedToAnyone ||
+        createdByMemberID == memberID ||
+        isAssignedTo(memberID) ||
+        memberRole == 'manager';
   }
 
   bool canComplete(String memberID) {
@@ -160,9 +160,15 @@ class HouseholdTask {
       taskDescription: taskDescription ?? this.taskDescription,
       taskStatus: taskStatus ?? this.taskStatus,
       createdByMemberID: createdByMemberID,
-      completedByMemberID: clearCompletion ? null : (completedByMemberID ?? this.completedByMemberID),
-      taskCompletionTime: clearCompletion ? null : (taskCompletionTime ?? this.taskCompletionTime),
-      taskAssignedMemberIDs: List<String>.unmodifiable(taskAssignedMemberIDs ?? this.taskAssignedMemberIDs),
+      completedByMemberID: clearCompletion
+          ? null
+          : (completedByMemberID ?? this.completedByMemberID),
+      taskCompletionTime: clearCompletion
+          ? null
+          : (taskCompletionTime ?? this.taskCompletionTime),
+      taskAssignedMemberIDs: List<String>.unmodifiable(
+        taskAssignedMemberIDs ?? this.taskAssignedMemberIDs,
+      ),
     );
   }
 
@@ -176,11 +182,6 @@ class HouseholdTask {
     'taskAssignedMemberIDs': List<String>.from(taskAssignedMemberIDs),
   };
 
-  static Map<String, dynamic> completeMap(String completedByMemberID) => {
-    'taskStatus': 'completed',
-    'completedByMemberID': completedByMemberID,
-  };
-
   factory HouseholdTask.fromMap(String taskId, Map<String, dynamic> data) {
     final completionTime = data['taskCompletionTime'];
 
@@ -191,14 +192,18 @@ class HouseholdTask {
       taskStatus: data['taskStatus'] as String? ?? 'pending',
       createdByMemberID: data['createdByMemberID'] as String? ?? '',
       completedByMemberID: data['completedByMemberID'] as String?,
-      taskCompletionTime: completionTime is Timestamp ? completionTime.toDate() : null,
-      taskAssignedMemberIDs: List<String>.unmodifiable(List<String>.from(data['taskAssignedMemberIDs'] as List? ?? const [],),),
+      taskCompletionTime: completionTime is Timestamp
+          ? completionTime.toDate()
+          : null,
+      taskAssignedMemberIDs: List<String>.unmodifiable(
+        List<String>.from(data['taskAssignedMemberIDs'] as List? ?? const []),
+      ),
     );
   }
 }
 
 // List of food item types:
-const List<String> pantryFoodType = [
+const List<String> pantryFoodTypes = [
   'Nuts/Seeds',
   'Pasta',
   'Bread',
@@ -293,14 +298,16 @@ class LowStockItem {
 
   const LowStockItem({required this.name, required this.category});
 }
+
 class StuffItem {
   final String itemId;
   final String itemName;
   final String itemDescription; // optional, may be empty
   final String itemStatus; // 'available' | 'low' | 'out_of_stock'
   final String listType; // 'household' | 'private'
-  final String ownerMemberID; // whose private list it's on (ignored for household items)
- 
+  final String
+  ownerMemberID; // whose private list it's on (ignored for household items)
+
   const StuffItem({
     required this.itemId,
     required this.itemName,
@@ -309,9 +316,9 @@ class StuffItem {
     required this.listType,
     required this.ownerMemberID,
   });
- 
+
   bool get isPrivate => listType == 'private';
- 
+
   StuffItem copyWith({
     String? itemName,
     String? itemDescription,
@@ -327,8 +334,6 @@ class StuffItem {
     );
   }
 }
-
-
 
 class ActivityEntry {
   final String text;

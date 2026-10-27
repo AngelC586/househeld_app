@@ -101,7 +101,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   // Registration error messages:
   String _getRegistrationErrorMessage(FirebaseAuthException error) {
     switch (error.code) {
-      case 'email-already in use':
+      case 'email-already-in-use':
         return 'An account already exists with that email.';
 
       case 'invalid-email':

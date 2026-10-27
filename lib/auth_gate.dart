@@ -1,5 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -19,8 +18,6 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   final _authStream = FirebaseAuth.instance.authStateChanges();
   final _householdService = HouseholdService();
-
-  bool bypassAuth = false;
 
   Future<void> _signOut() async {
     await FirebaseAuth.instance.signOut();
@@ -143,23 +140,6 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    if (kDebugMode && bypassAuth) {
-      return HomeScreen(
-        title: 'HouseHeld',
-        userProfile: const UserProfile(
-          uid: 'debug-user',
-          username: 'debug',
-          email: 'debug@example.com',
-          displayName: 'Debug User',
-        ),
-        onLogout: () {
-          setState(() {
-            bypassAuth = false;
-          });
-        },
-      );
-    }
-
     return StreamBuilder<User?>(
       stream: _authStream,
       builder: (context, snapshot) {
@@ -179,15 +159,7 @@ class _AuthGateState extends State<AuthGate> {
           return _householdGate(user);
         }
 
-        return LoginScreen(
-          onBypass: kDebugMode
-              ? () {
-                  setState(() {
-                    bypassAuth = true;
-                  });
-                }
-              : null,
-        );
+        return const LoginScreen();
       },
     );
   }

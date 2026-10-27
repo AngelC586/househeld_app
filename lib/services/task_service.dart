@@ -8,8 +8,8 @@ class TaskService {
   final FirebaseAuth _auth;
 
   TaskService({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _db = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   Future<String> createTask({
     required String householdID,
@@ -80,71 +80,71 @@ class TaskService {
       // Confirm every selected person belongs to this household.
       // All reads happen before the write
       for (final memberID in assignees) {
-        final assignedMember = await transaction.get(householdRef.collection('members').doc(memberID));
+        final assignedMember = await transaction.get(
+          householdRef.collection('members').doc(memberID),
+        );
 
         if (!assignedMember.exists) {
-          throw StateError('A selected person is no longer in this household. '
-              'Please refresh the page and try again.',
+          throw StateError(
+            'A selected person is no longer in this household. '
+            'Please refresh the page and try again.',
           );
         }
       }
 
       transaction.set(taskRef, task.toCreateMap());
-  });
+    });
 
-  return taskRef.id;
+    return taskRef.id;
   }
 
-  Stream <List<HouseholdTask>> watchTasks({
+  Stream<List<HouseholdTask>> watchTasks({
     required String householdID,
     required String memberRole,
   }) {
     final user = _auth.currentUser;
 
     if (user == null) {
-      return Stream<List<HouseholdTask>>.error(StateError('Please sign in before viewing tasks.'));
+      return Stream<List<HouseholdTask>>.error(
+        StateError('Please sign in before viewing tasks.'),
+      );
     }
 
     if (householdID.isEmpty || householdID.contains('/')) {
-      return Stream<List<HouseholdTask>>.error(StateError('A valid household ID is required.'));
+      return Stream<List<HouseholdTask>>.error(
+        StateError('A valid household ID is required.'),
+      );
     }
 
     if (!['manager', 'member', 'child'].contains(memberRole)) {
-      return Stream<List<HouseholdTask>>.error(StateError('A valid member role is required.'));
+      return Stream<List<HouseholdTask>>.error(
+        StateError('A valid member role is required.'),
+      );
     }
 
-    Query<Map<String, dynamic>> query = _db.collection('households').doc(householdID).collection('tasks');
+    Query<Map<String, dynamic>> query = _db
+        .collection('households')
+        .doc(householdID)
+        .collection('tasks');
 
     // Managers can view every task in their household.
     // Other members can view Anyone tasks, their own tasks, and tasks assigned to them.
     if (memberRole != 'manager') {
       query = query.where(
         Filter.or(
-          Filter(
-            'tasAssignedMemberIDs',
-            isEqualTo: <String>[],
-          ),
-          Filter(
-            'createdByMemberID',
-            isEqualTo: user.uid,
-          ),
-          Filter(
-            'taskAssignedMemberIDs',
-            arrayContains: user.uid,
-          ),
+          Filter('taskAssignedMemberIDs', isEqualTo: <String>[]),
+          Filter('createdByMemberID', isEqualTo: user.uid),
+          Filter('taskAssignedMemberIDs', arrayContains: user.uid),
         ),
       );
     }
 
     return query.snapshots().map(
       (snapshot) => snapshot.docs
-      .map(
-        (document) => HouseholdTask.fromMap(
-          document.id,
-          document.data(),
-        ),
-      )
-      .toList(),
+          .map(
+            (document) => HouseholdTask.fromMap(document.id, document.data()),
+          )
+          .toList(),
     );
   }
 
@@ -162,7 +162,7 @@ class TaskService {
       throw StateError('A valid household ID is required.');
     }
 
-    if (taskID.isEmpty || householdID.contains('/')) {
+    if (taskID.isEmpty || taskID.contains('/')) {
       throw StateError('A valid task ID is required.');
     }
 
@@ -174,7 +174,7 @@ class TaskService {
       final memberDocument = await transaction.get(memberRef);
 
       if (!memberDocument.exists) {
-        throw StateError('You do not belong to this hosuehold.');
+        throw StateError('You do not belong to this household.');
       }
 
       final taskDocument = await transaction.get(taskRef);
@@ -195,17 +195,20 @@ class TaskService {
       }
 
       if (!task.canComplete(user.uid)) {
-        throw StateError('Only a person assigned to this task can complete it.',);
+        throw StateError(
+          'Only a person assigned to this task can complete it.',
+        );
       }
 
-      transaction.update(
-        taskRef,
-        HouseholdTask.completeMap(user.uid),
-      );
+      transaction.update(taskRef, {
+        'taskStatus': 'completed',
+        'completedByMemberID': user.uid,
+        'taskCompletionTime': FieldValue.serverTimestamp(),
+      });
     });
   }
 
-    Future<void> updateTask({
+  Future<void> updateTask({
     required String householdID,
     required String taskID,
     required String name,
@@ -278,7 +281,8 @@ class TaskService {
 
       final currentAssignees = task.taskAssignedMemberIDs.toSet();
 
-      final assignmentChanged = assignees != null &&
+      final assignmentChanged =
+          assignees != null &&
           (assignees.length != currentAssignees.length ||
               !currentAssignees.containsAll(assignees));
 
@@ -311,7 +315,7 @@ class TaskService {
     });
   }
 
-    Future<void> deleteTask({
+  Future<void> deleteTask({
     required String householdID,
     required String taskID,
   }) async {
@@ -356,10 +360,7 @@ class TaskService {
 
       final task = HouseholdTask.fromMap(taskDocument.id, taskData);
 
-      if (!task.canView(
-        memberID: user.uid,
-        memberRole: role as String,
-      )) {
+      if (!task.canView(memberID: user.uid, memberRole: role as String)) {
         throw StateError('You do not have access to this task.');
       }
 

@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../widgets/stuff_item_row.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import 'tasks_screen.dart';
+import 'pantry_screen.dart';
 import 'stuff_item_form_screen.dart';
 
 enum _ListType { household, private }
@@ -24,7 +25,7 @@ class _StuffScreenState extends State<StuffScreen> {
   _ListType _listType = _ListType.household;
   bool _sortAscending = true;
 
-  List<StuffItem> _items = [];
+  final List<StuffItem> _items = [];
 
   String get _listTypeString =>
       _listType == _ListType.household ? 'household' : 'private';
@@ -47,7 +48,7 @@ class _StuffScreenState extends State<StuffScreen> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('No'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Yes'),
           ),
@@ -120,9 +121,9 @@ class _StuffScreenState extends State<StuffScreen> {
                   'This will permanently remove "${item.itemName}".',
                 );
                 if (confirmed) {
-                  setState(
-                    () => _items.removeWhere((x) => x.itemId == item.itemId),
-                  );
+                  setState(() {
+                    _items.removeWhere((x) => x.itemId == item.itemId);
+                  });
                 }
               },
             ),
@@ -132,12 +133,49 @@ class _StuffScreenState extends State<StuffScreen> {
     );
   }
 
+  // Screen navigation:
+  void _handleNav(int index) {
+    if (index == 3) return;
+
+    if (index == 0) {
+      Navigator.popUntil(context, (route) => route.isFirst);
+      return;
+    }
+
+    if (index == 1) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TasksScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 2) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PantryScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible =
         _items.where((i) {
-          if (_listType == _ListType.household)
+          if (_listType == _ListType.household) {
             return i.listType == 'household';
+          }
           return i.listType == 'private' && i.ownerMemberID == _currentUserID;
         }).toList()..sort(
           (a, b) =>
@@ -246,25 +284,7 @@ class _StuffScreenState extends State<StuffScreen> {
       ),
       bottomNavigationBar: HouseheldBottomNav(
         currentIndex: 3,
-        onTap: (i) {
-          if (i == 3) return; // already here
-          if (i == 0) {
-            Navigator.popUntil(
-              context,
-              (route) => route.isFirst,
-            ); // back to Home
-            return;
-          }
-          if (i == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => TasksScreen(householdID: widget.householdID),
-              ),
-            );
-            return;
-          }
-        },
+        onTap: _handleNav,
       ),
     );
   }
