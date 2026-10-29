@@ -305,8 +305,7 @@ class StuffItem {
   final String itemDescription; // optional, may be empty
   final String itemStatus; // 'available' | 'low' | 'out_of_stock'
   final String listType; // 'household' | 'private'
-  final String
-  ownerMemberID; // whose private list it's on (ignored for household items)
+  final String ownerMemberID; // whose private list it's on (ignored for household items)
 
   const StuffItem({
     required this.itemId,
@@ -318,6 +317,30 @@ class StuffItem {
   });
 
   bool get isPrivate => listType == 'private';
+
+  bool get isOutOfStock => itemStatus == 'out_of_stock';
+
+  factory StuffItem.fromMap(
+    String itemId,
+    Map<String, dynamic> data,
+  ) {
+    return StuffItem(
+      itemId: itemId, 
+      itemName: data['itemName'] as String? ?? '', 
+      itemDescription: data['itemDescription'] as String? ?? '',
+      itemStatus: data['itemStatus'] as String? ?? 'available',
+      listType: data['listType'] as String, 
+      ownerMemberID: data['ownerMemberID'] as String,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'itemName': itemName,
+    'itemDescription': itemDescription,
+    'itemStatus': itemStatus,
+    'listType': listType,
+    'ownerMemberID': ownerMemberID,
+  };
 
   StuffItem copyWith({
     String? itemName,

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
-
 
 class StuffItemFormScreen extends StatefulWidget {
   const StuffItemFormScreen({
     super.key,
     required this.currentUserID,
-    required this.listType, // 'household' | 'private'
+    required this.listType,
     this.existingItem,
   });
 
@@ -24,15 +24,25 @@ class StuffItemFormScreen extends StatefulWidget {
 class _StuffItemFormScreenState extends State<StuffItemFormScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
+
   late String _status;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.existingItem?.itemName ?? '');
-    _descriptionController =
-        TextEditingController(text: widget.existingItem?.itemDescription ?? '');
-    _status = widget.existingItem?.itemStatus ?? 'available';
+
+    final item = widget.existingItem;
+
+    _nameController = TextEditingController(
+      text: item?.itemName ?? '',
+    );
+
+    _descriptionController = TextEditingController(
+      text: item?.itemDescription ?? '',
+    );
+
+    _status = item?.itemStatus ?? 'available';
   }
 
   @override
@@ -42,13 +52,16 @@ class _StuffItemFormScreenState extends State<StuffItemFormScreen> {
     super.dispose();
   }
 
-  String get _listLabel => widget.listType == 'household' ? 'Household Item' : 'Personal Item';
-
   void _submit() {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
-
     final description = _descriptionController.text.trim();
+
+    if (name.isEmpty || name.length > 200) {
+      setState(() {
+        _errorMessage = 'Item names must be between 1 and 200 characters.';
+      });
+      return;
+    }
 
     final result = widget.isEditing
         ? widget.existingItem!.copyWith(
@@ -57,12 +70,13 @@ class _StuffItemFormScreenState extends State<StuffItemFormScreen> {
             itemStatus: _status,
           )
         : StuffItem(
-            itemId: 'local-${DateTime.now().millisecondsSinceEpoch}',
+            itemId: '',
             itemName: name,
             itemDescription: description,
             itemStatus: _status,
             listType: widget.listType,
-            ownerMemberID: widget.currentUserID,
+            ownerMemberID:
+                widget.listType == 'private' ? widget.currentUserID : '',
           );
 
     Navigator.pop(context, result);
@@ -70,6 +84,9 @@ class _StuffItemFormScreenState extends State<StuffItemFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final listLabel =
+        widget.listType == 'private' ? 'Personal Item' : 'Household Item';
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -81,78 +98,103 @@ class _StuffItemFormScreenState extends State<StuffItemFormScreen> {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: AppColors.forestDeep),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: AppColors.forestDeep,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
-                  Text(
-                    widget.isEditing ? 'Edit $_listLabel' : 'Add $_listLabel',
-                    style: AppText.heading.copyWith(fontSize: 20),
+                  Expanded(
+                    child: Text(
+                      widget.isEditing
+                          ? 'Edit $listLabel'
+                          : 'Add $listLabel',
+                      style: AppText.heading.copyWith(fontSize: 20),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-              Text('Item Name', style: AppText.label),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _nameController,
-                autofocus: !widget.isEditing,
-                decoration: InputDecoration(
-                  hintText: 'e.g. Dish soap',
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.line),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Name', style: AppText.label),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _nameController,
+                        autofocus: !widget.isEditing,
+                        maxLength: 200,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. Dish soap',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text('Status', style: AppText.label),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: _status,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'available',
+                            child: Text('Available'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'low',
+                            child: Text('Low'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'out_of_stock',
+                            child: Text('Out of Stock'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _status = value;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Description (Optional)',
+                        style: AppText.label,
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _descriptionController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          hintText: 'e.g. brand or location',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
-              Text('Item Description (optional)', style: AppText.label),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _descriptionController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: ' ',
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.line),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text('Item Status (optional)', style: AppText.label),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.line),
-                  ),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'available', child: Text('Available')),
-                  DropdownMenuItem(value: 'low', child: Text('Low')),
-                  DropdownMenuItem(value: 'out_of_stock', child: Text('Out of Stock')),
-                ],
-                onChanged: (v) => setState(() => _status = v ?? 'available'),
-              ),
-              const Spacer(),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: AppColors.line),
-                      ),
-                      child: Text('Cancel', style: AppText.body),
+                      child: const Text('Cancel'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -162,9 +204,8 @@ class _StuffItemFormScreenState extends State<StuffItemFormScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.forest,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: Text(widget.isEditing ? 'Save' : 'Add'),
+                      child: Text(widget.isEditing ? 'Update' : 'Add'),
                     ),
                   ),
                 ],

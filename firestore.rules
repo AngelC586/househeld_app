@@ -123,6 +123,96 @@ service cloud.firestore {
     }
 
     match /households/{householdID} {
+
+      // Membership role used for Stuff permissions.
+      function stuffMemberRole() {
+        return get(
+          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+        ).data.memberRole;
+      }
+
+      function canManageSharedStuff() {
+        return signedIn()
+          && stuffMemberRole() in ['manager', 'member'];
+      }
+
+      function canManagePrivateStuff(ownerID) {
+        return signedIn()
+          && request.auth.uid == ownerID
+          && stuffMemberRole() in ['manager', 'member', 'child'];
+      }
+
+      // Validate the fields saved by StuffItem.toMap().
+      function validStuffItem(data, expectedListType, expectedOwner) {
+        let fields = [
+          'itemName',
+          'itemDescription',
+          'itemStatus',
+          'listType',
+          'ownerMemberID'
+        ];
+
+        return data.keys().hasAll(fields)
+          && data.keys().hasOnly(fields)
+          && data.itemName is string
+          && data.itemName.size() > 0
+          && data.itemName.size() <= 200
+          && data.itemDescription is string
+          && data.itemStatus in [
+            'available',
+            'low',
+            'out_of_stock'
+          ]
+          && data.listType == expectedListType
+          && data.ownerMemberID == expectedOwner;
+      }
+
+      // Shared household items.
+      match /householdItemsLists/{stuffListID}/items/{itemID} {
+        allow read: if stuffListID == 'default'
+          && isMember(householdID);
+
+        allow create: if stuffListID == 'default'
+          && canManageSharedStuff()
+          && validStuffItem(request.resource.data, 'household', '');
+
+        allow update: if stuffListID == 'default'
+          && canManageSharedStuff()
+          && validStuffItem(request.resource.data, 'household', '')
+          && request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'itemName',
+                'itemDescription',
+                'itemStatus'
+              ]);
+
+        allow delete: if stuffListID == 'default'
+          && canManageSharedStuff();
+      }
+
+      // Private items belonging to one household member.
+      match /members/{ownerID}/personalItemsLists/{stuffListID}/items/{itemID} {
+        allow read: if stuffListID == 'default'
+          && canManagePrivateStuff(ownerID);
+
+        allow create: if stuffListID == 'default'
+          && canManagePrivateStuff(ownerID)
+          && validStuffItem(request.resource.data, 'private', ownerID);
+
+        allow update: if stuffListID == 'default'
+          && canManagePrivateStuff(ownerID)
+          && validStuffItem(request.resource.data, 'private', ownerID)
+          && request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'itemName',
+                'itemDescription',
+                'itemStatus'
+              ]);
+
+        allow delete: if stuffListID == 'default'
+          && canManagePrivateStuff(ownerID);
+      }
+
       allow get: if signedIn();
 
       allow create: if signedIn()

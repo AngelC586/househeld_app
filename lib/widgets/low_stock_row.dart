@@ -4,10 +4,17 @@ import '../models.dart';
 import '../theme/app_theme.dart';
 
 class LowStockRow extends StatelessWidget {
-  final PantryItem item;
+  final String name;
+  final String category;
   final VoidCallback onOpen;
 
-  const LowStockRow({super.key, required this.item, required this.onOpen});
+  LowStockRow({super.key, required PantryItem item, required this.onOpen})
+      : name = item.foodName,
+        category = item.foodType;
+
+  LowStockRow.stuff({super.key, required StuffItem item, required this.onOpen})
+      : name = item.itemName,
+        category = item.isPrivate ? 'Personal' : 'Household';
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +32,7 @@ class LowStockRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.foodName,
+                  name,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -34,7 +41,7 @@ class LowStockRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${item.foodType} · out of stock',
+                  '$category · out of stock',
                   style: AppText.bodySoft,
                 ),
               ],
