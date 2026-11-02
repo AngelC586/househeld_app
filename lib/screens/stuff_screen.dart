@@ -11,6 +11,7 @@ import 'tasks_screen.dart';
 import 'pantry_screen.dart';
 import 'stuff_item_form_screen.dart';
 import 'dart:async';
+import 'menu_screen.dart';
 
 enum _ListType { household, private }
 
@@ -560,6 +561,16 @@ class _StuffScreenState extends State<StuffScreen> {
         const SnackBar(content: Text('Grocery List - Coming Soon!')),
       );
     }
+
+    if (index == 5) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MenuScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
   }
 
   @override
@@ -598,7 +609,6 @@ class _StuffScreenState extends State<StuffScreen> {
             icon: const Icon(Icons.menu),
             tooltip: 'Menu',
             onPressed: () {
-              // TODO: wire up whatever the top-level menu should contain
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Menu — not built yet')),
               );
