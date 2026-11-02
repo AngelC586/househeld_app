@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 import '../widgets/grocery_row_card.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import 'grocery_list_form_screen.dart';
+import 'grocery_items_screen.dart';
+import 'shopping_screen.dart';
 import 'pantry_screen.dart';
 import 'stuff_screen.dart';
 import 'tasks_screen.dart';
@@ -21,15 +23,20 @@ class GroceryScreen extends StatefulWidget {
   State<GroceryScreen> createState() => _GroceryScreenState();
 }
 
-// State controlled class:
+// State controller class:
 class _GroceryScreenState extends State<GroceryScreen> {
   final GroceryService _service = GroceryService();
+
   late final Stream<List<GroceryList>> _listsStream;
+
   _ListSort _sort = _ListSort.name;
   bool _ascending = true;
+
   bool _busy = false;
   bool _resetDialogOpen = false;
+
   final Map<String, int> _itemCounts = {};
+
   String? _resetPromptedRevisionKey;
 
   @override
@@ -96,7 +103,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
     );
     if (id != null && mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Grocery List saved.')));
+          .showSnackBar(const SnackBar(content: Text('Grocery List saved!')));
     }
   }
 
@@ -170,7 +177,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
                 onTap: () async {
                   Navigator.pop(sheetContext);
                   if (await _confirm(
-                    'Reopen list?',
+                    'Mark as Incomplete?',
                     'This will mark every item in ${list.groceryListName} as unpurchased again.',
                   )) {
                     await _run(
@@ -266,7 +273,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
       try {
         final reset = await _confirm(
           'Grocery List complete!',
-          'Your household Grocery List is complete! Would you like to reset it?',
+          'Your household Grocery List is complete, would you like to reset it?',
         );
         if (!mounted) return;
         if (!reset) {
@@ -298,21 +305,40 @@ class _GroceryScreenState extends State<GroceryScreen> {
   // Navigation handling method:
   void _handleNav(int index) {
     if (index == 4) return;
+
     if (index == 0) {
       Navigator.popUntil(context, (route) => route.isFirst);
-    } else {
-      final destination = switch (index) {
-        1 => TasksScreen(householdID: widget.householdID),
-        2 => PantryScreen(householdID: widget.householdID),
-        3 => StuffScreen(householdID: widget.householdID),
-        _ => null,
-      };
-      if (destination != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => destination),
-        );
-      }
+      return;
+    }
+
+    if (index == 1) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TasksScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 2) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PantryScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 3) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StuffScreen(householdID: widget.householdID),
+        ),
+      );
+      return;
     }
   }
 
@@ -360,20 +386,47 @@ class _GroceryScreenState extends State<GroceryScreen> {
                 list: list,
                 itemCount: count,
                 onMenu: () => _showOptions(list),
-                onViewItems: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Stop right there...! That\'s not finished yet...',
+                onViewItems: () {
+                  Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => GroceryItemsScreen(
+                        householdID: widget.householdID,
+                        groceryListID: list.groceryListID,
+                      ),
                     ),
-                  ),
-                ),
-                onShop: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Hold your horses, partner. That\'s not ready yet...',
+                  );
+                },
+                onShop: () async {
+                  if (list.isComplete || count == 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Add some items or reopen the list before shopping!',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  final confirmed = await _confirm(
+                    'Shopping Trip',
+                    'Start shopping for ${list.groceryListName}?',
+                  );
+
+                  if (!confirmed || !context.mounted) return;
+
+                  await Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ShoppingScreen(
+                        householdID: widget.householdID,
+                        groceryListID: list.groceryListID,
+                        listName: list.groceryListName,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
           ),
@@ -423,6 +476,9 @@ class _GroceryScreenState extends State<GroceryScreen> {
                 ),
               ],
               bottom: const TabBar(
+                indicatorColor: Colors.white,
+                labelColor: Colors.white,
+                unselectedLabelColor: Color(0xFFC7D4C9),
                 tabs: [
                   Tab(text: 'Active Lists'),
                   Tab(text: 'Past Lists'),

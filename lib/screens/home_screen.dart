@@ -15,6 +15,7 @@ import '../services/stuff_service.dart';
 import 'tasks_screen.dart';
 import 'stuff_screen.dart';
 import 'pantry_screen.dart';
+import 'grocery_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -89,9 +90,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (index == 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GroceryScreen(householdID: householdID),
+        ),
       );
+      return;
     }
   }
 

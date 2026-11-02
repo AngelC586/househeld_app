@@ -162,12 +162,12 @@ class _GroceryListFormScreenState extends State<GroceryListFormScreen> {
       }
       if (mounted) Navigator.pop(context, listID);
     } catch (e) {
+      debugPrint('Grocery List save failed: $e');
+
       if (mounted) {
-        setState(
-          () => _error = e is StateError
-              ? e.message.toString()
-              : 'Unable to save list. Check access and try again.',
-        );
+        setState(() {
+          _error = e.toString();
+        });
       }
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -302,7 +302,11 @@ service cloud.firestore {
             && data.visibleMemberIDs is list
             && data.visibleMemberIDs.size() <= 8
             && data.visibleMemberIDs.toSet().size()
-                == data.visibleMemberIDs.size();
+                == data.visibleMemberIDs.size()
+            && (
+              data.groceryListVisibility == 'restricted'
+              || data.visibleMemberIDs == []
+            );
         }
 
         function validGroceryList(data) {
@@ -353,6 +357,18 @@ service cloud.firestore {
             && data.ownerMemberID != 'default';
         }
 
+        function validGroceryRevisionUpdate() {
+          let oldRevision = resource.data.groceryItemsRevision;
+          let newRevision = request.resource.data.groceryItemsRevision;
+
+          return oldRevision is int
+            && newRevision is int
+            && (
+              newRevision == oldRevision
+              || newRevision == oldRevision + 1
+            );
+        }
+
         // Read default-list documents that were  
         // created before new attributes were added:
         function canViewGroceryList(data) {
@@ -368,6 +384,17 @@ service cloud.firestore {
         function canViewParentList() {
           return exists(groceryListPath())
             && canViewGroceryList(get(groceryListPath()).data);
+        }
+
+        function canCreateItemInNewList() {
+          return !exists(groceryListPath())
+            && existsAfter(groceryListPath())
+            && isMember(householdID)
+            && validCustomGroceryList(
+              getAfter(groceryListPath()).data
+            )
+            && getAfter(groceryListPath()).data.ownerMemberID
+                == request.auth.uid;
         }
 
         function isGroceryListOwner() {
@@ -406,10 +433,13 @@ service cloud.firestore {
               (
                 data.groceryItemStatus == 'unpurchased'
                 && data.groceryItemQuantity > 0
+                && data.get('groceryItemPurchasedQuantity', 0) == 0
               )
-              || (
+              ||
+              (
                 data.groceryItemStatus == 'purchased'
                 && data.groceryItemQuantity == 0
+                && data.get('groceryItemPurchasedQuantity', 0) >= 0
               )
             )
             && (
@@ -441,29 +471,52 @@ service cloud.firestore {
           && createsHousehold(householdID)
           && validDefaultGroceryList(request.resource.data)
           && request.resource.data.groceryListName == 'Grocery List'
+          && request.resource.data.groceryItemsRevision == 0
         ) || (
           groceryListID != 'default'
           && isMember(householdID)
           && validCustomGroceryList(request.resource.data)
           && request.resource.data.ownerMemberID == request.auth.uid
-          && request.resource.data.groceryListStatus == 'incomplete'
+          && request.resource.data.groceryListStatus in [
+            'incomplete',
+            'complete'
+          ]
+          && (
+            request.resource.data.groceryListStatus != 'complete'
+            || request.resource.data.groceryItemsRevision > 0
+          )
         );
 
         allow update: if canViewGroceryList(resource.data)
+          && validGroceryRevisionUpdate()
           && (
             (
+              // Default Grocery List:
+              // Household members can update its permitted fields
               groceryListID == 'default'
-              && validDefaultGroceryList(request.resource.data)
+              && isMember(householdID)
               && request.resource.data.diff(resource.data)
                   .affectedKeys().hasOnly([
                     'groceryListName',
                     'groceryListStatus',
                     'groceryListDescription',
+                    'groceryListVisibility',
+                    'ownerMemberID',
                     'visibleMemberIDs',
                     'groceryItemsRevision'
                   ])
+              && request.resource.data.get(
+                    'groceryListStatus',
+                    'incomplete'
+                  ) in [
+                    'incomplete',
+                    'defaultComplete',
+                    'completeNoReset'
+                  ]
             )
-            || (
+            ||
+            (
+              // Custom Grocery Lists:
               groceryListID != 'default'
               && validCustomGroceryList(request.resource.data)
               && request.resource.data.ownerMemberID
@@ -486,11 +539,12 @@ service cloud.firestore {
         match /items/{groceryItemID} {
           allow read: if canViewParentList();
 
-          allow create: if canViewParentList()
-            && validGroceryItem(request.resource.data);
+          allow create: if (
+            canViewParentList()
+            || canCreateItemInNewList()
+          );
 
-          allow update: if canViewParentList()
-            && validGroceryItem(request.resource.data);
+          allow update: if canViewParentList();
 
           allow delete: if canViewParentList();
         }

@@ -12,6 +12,7 @@ import '../widgets/task_row_card.dart';
 import 'task_form_screen.dart';
 import 'pantry_screen.dart';
 import 'stuff_screen.dart';
+import 'grocery_screen.dart';
 
 enum _SortField { title, assignee }
 
@@ -503,9 +504,13 @@ class _TasksScreenState extends State<TasksScreen> {
     }
 
     if (index == 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GroceryScreen(householdID: widget.householdID),
+        ),
       );
+      return;
     }
   }
 

@@ -9,7 +9,9 @@ import '../widgets/househeld_bottom_nav.dart';
 import '../services/stuff_service.dart';
 import 'tasks_screen.dart';
 import 'pantry_screen.dart';
+import 'grocery_screen.dart';
 import 'stuff_item_form_screen.dart';
+
 import 'dart:async';
 
 enum _ListType { household, private }
@@ -26,8 +28,7 @@ class StuffScreen extends StatefulWidget {
 class _StuffScreenState extends State<StuffScreen> {
   final _stuffService = StuffService();
 
-  String get _currentUserID =>
-    FirebaseAuth.instance.currentUser?.uid ?? '';
+  String get _currentUserID => FirebaseAuth.instance.currentUser?.uid ?? '';
 
   StreamSubscription<List<StuffItem>>? _itemsSubscription;
 
@@ -42,12 +43,12 @@ class _StuffScreenState extends State<StuffScreen> {
 
   String get _listTypeString =>
       _listType == _ListType.household ? 'household' : 'private';
-    
+
   @override
   void initState() {
     super.initState();
     _listenToItems();
-  } 
+  }
 
   void _listenToItems() {
     _itemsSubscription?.cancel();
@@ -60,22 +61,20 @@ class _StuffScreenState extends State<StuffScreen> {
       _items.clear();
     });
 
-    _itemsSubscription = _stuffService.watchItems(
-      householdID: widget.householdID, 
-      listType: selectedList,
-      )
-      .listen(
-        (items) {
-          if (!mounted || selectedList != _listTypeString) return;
+    _itemsSubscription = _stuffService
+        .watchItems(householdID: widget.householdID, listType: selectedList)
+        .listen(
+          (items) {
+            if (!mounted || selectedList != _listTypeString) return;
 
-          setState(() {
-            _items
-              ..clear()
-              ..addAll(items);
+            setState(() {
+              _items
+                ..clear()
+                ..addAll(items);
 
-            _isLoading = false;
-            _loadError = null;
-          }); 
+              _isLoading = false;
+              _loadError = null;
+            });
           },
           onError: (Object error) {
             if (!mounted || selectedList != _listTypeString) return;
@@ -85,9 +84,9 @@ class _StuffScreenState extends State<StuffScreen> {
               _isLoading = false;
               _loadError = 'Unable to load your items. Please try again.';
             });
-          }
+          },
         );
-  } 
+  }
 
   void _selectList(_ListType listType) {
     if (_listType == listType) return;
@@ -111,8 +110,8 @@ class _StuffScreenState extends State<StuffScreen> {
       'Replenish',
       item.isPrivate
           ? 'Would you like to add ${item.itemName} to the general '
-              'Grocery List? Its name and description will be visible '
-              'to your household.'
+                'Grocery List? Its name and description will be visible '
+                'to your household.'
           : 'Would you like to add ${item.itemName} to a Grocery List?',
     );
 
@@ -175,52 +174,43 @@ class _StuffScreenState extends State<StuffScreen> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${item.itemName} added to Grocery List.'),
-      ),
+      SnackBar(content: Text('${item.itemName} added to Grocery List.')),
     );
   }
 
-  Future<void> _updateStatus(
-    StuffItem item, 
-    String newStatus,
-    ) async {
-      if (_isSaving || item.itemStatus == newStatus) return;
+  Future<void> _updateStatus(StuffItem item, String newStatus) async {
+    if (_isSaving || item.itemStatus == newStatus) return;
 
-      setState(() {
-        _isSaving = true;
-      });
+    setState(() {
+      _isSaving = true;
+    });
 
-      try {
-        final becameOutOfStock = await _stuffService.updateStatus(
-          householdID: widget.householdID,
-          item: item,
-          status: newStatus,
-        );
+    try {
+      final becameOutOfStock = await _stuffService.updateStatus(
+        householdID: widget.householdID,
+        item: item,
+        status: newStatus,
+      );
 
-        if (!mounted) return;
-
-        if (becameOutOfStock) {
-          await _askAddToGrocery(
-           item.copyWith(itemStatus: newStatus),
-          );
-        }
-      
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Item status updated.')),
-      );
+      if (becameOutOfStock) {
+        await _askAddToGrocery(item.copyWith(itemStatus: newStatus));
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Item status updated.')));
     } catch (error) {
       if (!mounted) return;
 
-      final message = error is StateError 
-        ? error.message.toString()
-        : 'Unable to update the item status. Please try again.';
+      final message = error is StateError
+          ? error.message.toString()
+          : 'Unable to update the item status. Please try again.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -228,7 +218,6 @@ class _StuffScreenState extends State<StuffScreen> {
         });
       }
     }
-    
   }
 
   Future<bool> _confirm(String title, String message) async {
@@ -267,7 +256,7 @@ class _StuffScreenState extends State<StuffScreen> {
     setState(() {
       _isSaving = true;
     });
-    
+
     try {
       final result = await Navigator.push<StuffItem>(
         context,
@@ -291,9 +280,8 @@ class _StuffScreenState extends State<StuffScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Item added.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Item added.')));
 
       if (result.itemStatus == 'out_of_stock') {
         final savedItem = StuffItem(
@@ -310,20 +298,23 @@ class _StuffScreenState extends State<StuffScreen> {
         } catch (error) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unable to add the item to the grocery list. Please try again.')),
+            const SnackBar(
+              content: Text(
+                'Unable to add the item to the grocery list. Please try again.',
+              ),
+            ),
           );
         }
       }
     } catch (error) {
       if (!mounted) return;
-      
-      final message = error is StateError
-        ? error.message.toString()
-        : 'Unable to save the item. Please try again.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      final message = error is StateError
+          ? error.message.toString()
+          : 'Unable to save the item. Please try again.';
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -351,41 +342,39 @@ class _StuffScreenState extends State<StuffScreen> {
 
     try {
       final result = await Navigator.push<StuffItem>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => StuffItemFormScreen(
-          currentUserID: _currentUserID,
-          listType: item.listType,
-          existingItem: item,
+        context,
+        MaterialPageRoute(
+          builder: (_) => StuffItemFormScreen(
+            currentUserID: _currentUserID,
+            listType: item.listType,
+            existingItem: item,
+          ),
         ),
-      ),
-    );
-    if (!mounted || result == null) return;
+      );
+      if (!mounted || result == null) return;
 
-    await _stuffService.updateItem(
-      householdID: widget.householdID,
-      item: result,
-    );
+      await _stuffService.updateItem(
+        householdID: widget.householdID,
+        item: result,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Item updated.')),
-    );
-    if (item.itemStatus != 'out_of_stock' && 
-        result.itemStatus == 'out_of_stock') {
-          await _addItemToGroceryAfterEdit(result);
-        }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Item updated.')));
+      if (item.itemStatus != 'out_of_stock' &&
+          result.itemStatus == 'out_of_stock') {
+        await _addItemToGroceryAfterEdit(result);
+      }
     } catch (error) {
       if (!mounted) return;
 
-      final message = error is StateError 
-      ? error.message.toString()
-      : 'Unable to update the item. Please try again.';
+      final message = error is StateError
+          ? error.message.toString()
+          : 'Unable to update the item. Please try again.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -406,9 +395,9 @@ class _StuffScreenState extends State<StuffScreen> {
       final confirmed = await _confirm(
         'Delete this item?',
         'This will permanently remove "${item.itemName}" '
-        'from your items list.',
+            'from your items list.',
       );
-      
+
       if (!mounted || !confirmed) return;
 
       await _stuffService.deleteItem(
@@ -418,19 +407,17 @@ class _StuffScreenState extends State<StuffScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Item deleted.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Item deleted.')));
     } catch (error) {
       if (!mounted) return;
 
-      final message = error is StateError 
-      ? error.message.toString()
-      : 'Unable to delete the item. Please try again.';
+      final message = error is StateError
+          ? error.message.toString()
+          : 'Unable to delete the item. Please try again.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -438,7 +425,6 @@ class _StuffScreenState extends State<StuffScreen> {
         });
       }
     }
-      
   }
 
   Future<void> _addItemToGroceryListAfterEdit(StuffItem item) async {
@@ -449,19 +435,16 @@ class _StuffScreenState extends State<StuffScreen> {
     });
 
     try {
-      await _askAddToGrocery(
-        item,
-      );
+      await _askAddToGrocery(item);
     } catch (error) {
       if (!mounted) return;
 
-      final message = error is StateError 
-      ? error.message.toString()
-      : 'Unable to add the item to the grocery list. Please try again.';
+      final message = error is StateError
+          ? error.message.toString()
+          : 'Unable to add the item to the grocery list. Please try again.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -473,14 +456,16 @@ class _StuffScreenState extends State<StuffScreen> {
 
   Future<void> _addItemToGroceryAfterEdit(StuffItem item) async {
     try {
-      await _askAddToGrocery(
-        item,
-      );
+      await _askAddToGrocery(item);
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to add the item to the grocery list. Please try again.')),
+        const SnackBar(
+          content: Text(
+            'Unable to add the item to the grocery list. Please try again.',
+          ),
+        ),
       );
     }
   }
@@ -497,7 +482,10 @@ class _StuffScreenState extends State<StuffScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.shopping_cart_outlined, color: AppColors.forest),
+              leading: const Icon(
+                Icons.shopping_cart_outlined,
+                color: AppColors.forest,
+              ),
               title: const Text('Add to Grocery List'),
               onTap: () {
                 Navigator.pop(context);
@@ -556,9 +544,13 @@ class _StuffScreenState extends State<StuffScreen> {
     }
 
     if (index == 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GroceryScreen(householdID: widget.householdID),
+        ),
       );
+      return;
     }
   }
 
@@ -617,8 +609,7 @@ class _StuffScreenState extends State<StuffScreen> {
                     child: _toggleButton(
                       label: 'Household',
                       selected: _listType == _ListType.household,
-                      onTap: () =>
-                          _selectList(_ListType.household),
+                      onTap: () => _selectList(_ListType.household),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -626,8 +617,7 @@ class _StuffScreenState extends State<StuffScreen> {
                     child: _toggleButton(
                       label: 'Private (yours)',
                       selected: _listType == _ListType.private,
-                      onTap: () =>
-                          _selectList(_ListType.private),
+                      onTap: () => _selectList(_ListType.private),
                     ),
                   ),
                 ],

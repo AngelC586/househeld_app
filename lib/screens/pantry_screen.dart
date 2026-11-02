@@ -10,6 +10,7 @@ import '../widgets/pantry_row_card.dart';
 import 'pantry_form_screen.dart';
 import 'tasks_screen.dart';
 import 'stuff_screen.dart';
+import 'grocery_screen.dart';
 
 // Sorting options:
 enum _PantrySortField { name, type, quantity }
@@ -493,9 +494,13 @@ class _PantryScreenState extends State<PantryScreen> {
     }
 
     if (index == 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grocery List - Coming Soon!')),
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GroceryScreen(householdID: widget.householdID),
+        ),
       );
+      return;
     }
   }
 

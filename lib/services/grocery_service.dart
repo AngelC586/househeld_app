@@ -1683,4 +1683,207 @@ class GroceryService {
       transaction.update(listRef, {'groceryListName': trimmedName});
     });
   }
+
+  // Shopping Trip method to commit all changes in a single transaction:
+  Future<void> purchaseSelectedItems({
+    required String householdID,
+    required String groceryListID,
+    required List<String> itemIDs,
+  }) async {
+    final uid = _requireUserID();
+
+    _validateHouseholdID(householdID);
+
+    _validateListID(groceryListID);
+
+    final selected = itemIDs.toSet();
+
+    if (selected.isEmpty) return;
+
+    // Currently caps Shopping Trip items to 20:
+    if (selected.length > 20 ||
+        selected.any((id) => id.isEmpty || id.contains('/'))) {
+      throw StateError('Select at most 20 valid items per shopping trip.');
+    }
+
+    final householdRef = _db.collection('households').doc(householdID);
+
+    final memberRef = householdRef.collection('members').doc(uid);
+
+    final listRef = _lists(householdID).doc(groceryListID);
+
+    final listBefore = await listRef.get();
+
+    final beforeData = listBefore.data();
+
+    if (beforeData == null) throw StateError('Grocery List not found.');
+
+    final revision = beforeData['groceryItemsRevision'];
+
+    if (revision is! int || revision < 0) {
+      throw StateError('Invalid list revision.');
+    }
+
+    final index = await _items(householdID, groceryListID).get();
+
+    // Currently can only shop with lists <= 60 items long:
+    if (index.docs.length > 60) {
+      throw StateError(
+        'This Grocery List is too large, try removing some items first.',
+      );
+    }
+
+    if (!selected.every((id) => index.docs.any((doc) => doc.id == id))) {
+      throw StateError('The item selection has changed, please try again.');
+    }
+
+    await _db.runTransaction<void>((transaction) async {
+      final member = await transaction.get(memberRef);
+
+      final listSnapshot = await transaction.get(listRef);
+
+      final data = listSnapshot.data();
+
+      if (!member.exists || data == null) {
+        throw StateError('Membership or list unavailable.');
+      }
+
+      final list = GroceryList.fromMap(listSnapshot.id, data);
+
+      if (!list.canView(uid)) throw StateError('You cannot access this list.');
+
+      if (list.isComplete) {
+        throw StateError('This Grocery List is already complete!.');
+      }
+
+      if (data['groceryItemsRevision'] != revision) {
+        throw StateError('The list changed, please try again.');
+      }
+
+      final items = <GroceryItem>[];
+
+      final refs = <DocumentReference<Map<String, dynamic>>>[];
+
+      for (final doc in index.docs) {
+        final snap = await transaction.get(doc.reference);
+
+        if (!snap.exists) {
+          throw StateError('An item was removed, please try again.');
+        }
+
+        items.add(GroceryItem.fromMap(snap.id, snap.data()!));
+        refs.add(doc.reference);
+      }
+
+      final pantryQuantities = <String, int>{};
+
+      final stuffIDs = <String>{};
+
+      var anyToPurchase = false;
+
+      var allPurchasedAfter = items.isNotEmpty;
+
+      for (final item in items) {
+        if (item.isPurchased) continue;
+        if (!selected.contains(item.groceryItemID)) {
+          allPurchasedAfter = false;
+          continue;
+        }
+
+        anyToPurchase = true;
+
+        if (item.groceryItemQuantity <= 0) {
+          throw StateError('Invalid item quantity.');
+        }
+
+        if (item.sourceFoodItemID != null &&
+            item.sourceHouseholdItemID != null) {
+          throw StateError('An item has two sources.');
+        }
+
+        if (item.sourceFoodItemID != null) {
+          final id = item.sourceFoodItemID!;
+
+          pantryQuantities[id] =
+              (pantryQuantities[id] ?? 0) + item.groceryItemQuantity;
+        }
+
+        if (item.sourceHouseholdItemID != null) {
+          stuffIDs.add(item.sourceHouseholdItemID!);
+        }
+      }
+
+      final pantrySources = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+      final stuffSources = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+
+      for (final id in pantryQuantities.keys) {
+        pantrySources[id] = await transaction.get(
+          householdRef.collection('pantryItems').doc(id),
+        );
+      }
+
+      for (final id in stuffIDs) {
+        stuffSources[id] = await transaction.get(
+          householdRef
+              .collection('householdItemsLists')
+              .doc('default')
+              .collection('items')
+              .doc(id),
+        );
+      }
+
+      // This is where all selected items are committed to the database:
+      for (final entry in pantrySources.entries) {
+        final source = entry.value;
+        final quantity = source.data()?['foodQuantity'];
+
+        if (quantity is! int || quantity < 0) {
+          throw StateError('Linked Pantry Item is missing or invalid.');
+        }
+
+        final total = quantity + pantryQuantities[entry.key]!;
+
+        transaction.update(source.reference, {
+          'foodQuantity': total,
+          'foodStockStatus': PantryItem.stockStatusForQuantity(total),
+        });
+      }
+
+      for (final source in stuffSources.values) {
+        final details = source.data();
+
+        if (details == null ||
+            details['listType'] != 'household' ||
+            details['ownerMemberID'] != '') {
+          throw StateError('Linked Household Item is unavailable.');
+        }
+
+        transaction.update(source.reference, {'itemStatus': 'available'});
+      }
+
+      for (var i = 0; i < items.length; i++) {
+        final item = items[i];
+
+        if (item.isPurchased || !selected.contains(item.groceryItemID)) {
+          continue;
+        }
+
+        transaction.update(refs[i], {
+          'groceryItemQuantity': 0,
+          'groceryItemPurchasedQuantity': item.groceryItemQuantity,
+          'groceryItemStatus': groceryItemPurchased,
+        });
+      }
+
+      if (anyToPurchase) {
+        transaction.update(listRef, {
+          'groceryItemsRevision': revision + 1,
+          if (allPurchasedAfter)
+            'groceryListStatus': list.isDefault
+                ? groceryListDefaultComplete
+                : groceryListComplete,
+        });
+      }
+    });
+  }
 }

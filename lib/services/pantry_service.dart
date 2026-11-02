@@ -56,11 +56,6 @@ class PantryService {
     }
 
     await _pantryItems(householdID).doc(item.foodItemID).update(item.toMap());
-
-    await _updateLinkedGroceryDescriptions(
-      householdID: householdID,
-      item: item,
-    );
   }
 
   Future<void> updateQuantity({
@@ -93,64 +88,14 @@ class PantryService {
     required String householdID,
     required String foodItemID,
   }) async {
-    final groceryLists = await _db
-        .collection('households')
-        .doc(householdID)
-        .collection('groceryLists')
-        .get();
-
-    final batch = _db.batch();
-
-    batch.delete(_pantryItems(householdID).doc(foodItemID));
-
-    for (final groceryList in groceryLists.docs) {
-      final linkedItems = await groceryList.reference
-          .collection('items')
-          .where('sourceFoodItemID', isEqualTo: foodItemID)
-          .get();
-
-      for (final linkedItem in linkedItems.docs) {
-        batch.update(linkedItem.reference, {'sourceFoodItemID': null});
-      }
+    if (householdID.isEmpty ||
+        householdID.contains('/') ||
+        foodItemID.isEmpty ||
+        foodItemID.contains('/')) {
+      throw StateError('Valid Household and Pantry Item IDs are required.');
     }
 
-    await batch.commit();
-  }
-
-  // When a pantry item gets updated, so does its linked grocery item:
-  Future<void> _updateLinkedGroceryDescriptions({
-    required String householdID,
-    required PantryItem item,
-  }) async {
-    final groceryLists = await _db
-        .collection('households')
-        .doc(householdID)
-        .collection('groceryLists')
-        .get();
-
-    final batch = _db.batch();
-    var hasUpdates = false;
-
-    for (final groceryList in groceryLists.docs) {
-      final linkedItems = await groceryList.reference
-          .collection('items')
-          .where('sourceFoodItemID', isEqualTo: item.foodItemID)
-          .get();
-
-      for (final linkedItem in linkedItems.docs) {
-        hasUpdates = true;
-
-        batch.update(linkedItem.reference, {
-          'groceryItemName': item.foodName,
-          'groceryItemType': item.foodType,
-          'groceryItemDescription': item.foodDescription,
-        });
-      }
-    }
-
-    if (hasUpdates) {
-      await batch.commit();
-    }
+    await _pantryItems(householdID).doc(foodItemID).delete();
   }
 
   // Method for allowing a pantry item to get added to a grocery list:
