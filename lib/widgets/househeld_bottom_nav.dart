@@ -17,6 +17,7 @@ class HouseheldBottomNav extends StatelessWidget {
     ('Pantry', Icons.set_meal_outlined),
     ('Stuff', Icons.face_outlined),
     ('Grocery', Icons.list_alt_outlined),
+    ('Menu', Icons.settings_outlined),
   ];
 
   @override

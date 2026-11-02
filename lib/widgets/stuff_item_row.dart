@@ -9,7 +9,6 @@ String stuffStatusLabel(String status) {
       return 'Low';
     case 'out_of_stock':
       return 'Out of Stock';
-    case 'available':
     default:
       return 'Available';
   }
@@ -21,7 +20,6 @@ Color stuffStatusColor(String status) {
       return AppColors.mustard;
     case 'out_of_stock':
       return AppColors.clay;
-    case 'available':
     default:
       return AppColors.forest;
   }
@@ -30,29 +28,31 @@ Color stuffStatusColor(String status) {
 const _allStatuses = ['available', 'low', 'out_of_stock'];
 
 class StuffItemRow extends StatelessWidget {
-  final StuffItem item;
-
-  /// Tapping the status chip opens a picker; selecting one calls this.
-  final ValueChanged<String> onStatusChange;
-
-  /// Optional: three-dot button + long-press, same pattern as TaskRowCard.
-  final VoidCallback? onMenu;
-
   const StuffItemRow({
     super.key,
     required this.item,
     required this.onStatusChange,
     this.onMenu,
+    this.canEdit = true,
   });
 
+  final StuffItem item;
+  final ValueChanged<String> onStatusChange;
+  final VoidCallback? onMenu;
+  final bool canEdit;
+
   void _pickStatus(BuildContext context) {
-    showModalBottomSheet(
+    if (!canEdit) return;
+
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(16),
+        ),
       ),
-      builder: (context) => SafeArea(
+      builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -68,8 +68,11 @@ class StuffItemRow extends StatelessWidget {
                     ? const Icon(Icons.check, color: AppColors.forest)
                     : null,
                 onTap: () {
-                  Navigator.pop(context);
-                  onStatusChange(status);
+                  Navigator.pop(sheetContext);
+
+                  if (status != item.itemStatus) {
+                    onStatusChange(status);
+                  }
                 },
               ),
           ],
@@ -80,9 +83,10 @@ class StuffItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = stuffStatusColor(item.itemStatus);
+    final statusColor = stuffStatusColor(item.itemStatus);
+
     return GestureDetector(
-      onLongPress: onMenu,
+      onLongPress: canEdit ? onMenu : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
@@ -100,62 +104,66 @@ class StuffItemRow extends StatelessWidget {
                 children: [
                   Text(
                     item.itemName,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: AppText.body.copyWith(
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.ink,
                     ),
                   ),
                   if (item.itemDescription.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       item.itemDescription,
                       style: AppText.bodySoft,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ],
               ),
             ),
-            GestureDetector(
-              onTap: () => _pickStatus(context),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: canEdit ? () => _pickStatus(context) : null,
+              borderRadius: BorderRadius.circular(12),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
+                  horizontal: 12,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: color),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.line),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       stuffStatusLabel(item.itemStatus),
-                      style: TextStyle(
-                        fontSize: 11.5,
+                      style: AppText.body.copyWith(
+                        color: statusColor,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w600,
-                        color: color,
                       ),
                     ),
-                    Icon(Icons.arrow_drop_down, size: 16, color: color),
+                    if (canEdit)
+                      Icon(
+                        Icons.arrow_drop_down,
+                        size: 18,
+                        color: statusColor,
+                      ),
                   ],
                 ),
               ),
             ),
-            if (onMenu != null)
+            if (onMenu != null && canEdit)
               IconButton(
                 icon: const Icon(
                   Icons.more_vert,
-                  size: 20,
                   color: AppColors.inkSoft,
                 ),
-                onPressed: onMenu,
                 tooltip: 'Item options',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                onPressed: onMenu,
               ),
           ],
         ),

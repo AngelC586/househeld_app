@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:househeld_app/screens/menu_screen.dart';
 
 import '../models.dart';
 import '../theme/app_theme.dart';
@@ -11,9 +12,12 @@ import '../widgets/zero_state.dart';
 import '../services/household_service.dart';
 import '../services/task_service.dart';
 import '../services/pantry_service.dart';
+import '../services/stuff_service.dart';
 import 'tasks_screen.dart';
 import 'stuff_screen.dart';
 import 'pantry_screen.dart';
+
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -37,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final HouseholdService _householdService = HouseholdService();
   final TaskService _taskService = TaskService();
   final PantryService _pantryService = PantryService();
+  final StuffService _stuffService = StuffService();
 
   // Screen navigation:
   void _handleNav(int index) {
@@ -90,6 +95,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Grocery List - Coming Soon!')),
       );
+    }
+
+    if (index == 5) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MenuScreen(householdID: householdID),
+        ),
+      );
+      return;
     }
   }
 
@@ -190,13 +205,33 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           }
 
-                          return SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
-                            child: _buildDashboard(
-                              members: members,
-                              tasks: tasksSnapshot.data!,
-                              pantryItems: pantrySnapshot.data!,
+                          return StreamBuilder<List<StuffItem>>(
+                            stream: _stuffService.watchItems(
+                              householdID: householdID,
+                              listType: 'household',
                             ),
+                            builder: (context, stuffSnapshot) {
+                              if (stuffSnapshot.hasError) {
+                                return _buildLoadError(
+                                  'Unable to load Stuff items.',
+                                );
+                              }
+
+                              if (!stuffSnapshot.hasData) {
+                                return const Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                              }
+                              return SingleChildScrollView(
+                                padding: const EdgeInsets.all(20),
+                                child: _buildDashboard(
+                                  members: members,
+                                  tasks: tasksSnapshot.data!,
+                                  pantryItems: pantrySnapshot.data!,
+                                  stuffItems: stuffSnapshot.data!,
+                                ),
+                              );
+                            },
                           );
                         },
                       );
@@ -278,6 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required List<HouseholdMember> members,
     required List<HouseholdTask> tasks,
     required List<PantryItem> pantryItems,
+    required List<StuffItem> stuffItems,
   }) {
     final pendingTasks = tasks.where((task) => !task.isCompleted).toList();
 
@@ -285,7 +321,12 @@ class _HomeScreenState extends State<HomeScreen> {
         .where((item) => !item.isInStock)
         .toList();
 
-    final allCaughtUp = pendingTasks.isEmpty && outOfStockItems.isEmpty;
+    final outOfStockStuff = stuffItems
+        .where((item) => item.itemStatus == 'out_of_stock')
+        .toList();
+
+    final totalItemsOut = outOfStockItems.length + outOfStockStuff.length;
+    final allCaughtUp = pendingTasks.isEmpty && totalItemsOut == 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -294,7 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             StatCard(number: '${pendingTasks.length}', label: 'tasks pending'),
             const SizedBox(width: 10),
-            StatCard(number: '${outOfStockItems.length}', label: 'items out'),
+            StatCard(number: '$totalItemsOut', label: 'items out'),
           ],
         ),
 
@@ -350,7 +391,13 @@ class _HomeScreenState extends State<HomeScreen> {
               child: LowStockRow(item: item, onOpen: () => _handleNav(2)),
             ),
 
-          if (outOfStockItems.isEmpty)
+          for (final item in outOfStockStuff)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: LowStockRow.stuff(item: item, onOpen: () => _handleNav(3)),
+            ),
+
+          if (totalItemsOut == 0)
             Text('Nothing is out of stock.', style: AppText.bodySoft),
         ],
       ],
