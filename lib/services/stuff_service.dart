@@ -7,10 +7,8 @@ class StuffService {
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
 
-  StuffService({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  }) : _db = firestore ?? FirebaseFirestore.instance, 
+  StuffService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _db = firestore ?? FirebaseFirestore.instance,
       _auth = auth ?? FirebaseAuth.instance;
 
   String _requireUserID() {
@@ -28,7 +26,7 @@ class StuffService {
       throw StateError('A valid household ID is required');
     }
 
-    if (listType != 'household' && listType != 'private'){
+    if (listType != 'household' && listType != 'private') {
       throw StateError('Please choose a valid items list.');
     }
   }
@@ -42,17 +40,17 @@ class StuffService {
 
     if (listType == 'private') {
       return householdRef
-        .collection('members')
-        .doc(userID)
-        .collection('personalItemsLists')
-        .doc('default')
-        .collection('items');
+          .collection('members')
+          .doc(userID)
+          .collection('personalItemsLists')
+          .doc('default')
+          .collection('items');
     }
 
     return householdRef
-      .collection('householdItemsLists')
-      .doc('default')
-      .collection('items');
+        .collection('householdItemsLists')
+        .doc('default')
+        .collection('items');
   }
 
   // Save a new item and return its Firestore document ID.
@@ -77,10 +75,10 @@ class StuffService {
     }
 
     final memberRef = _db
-      .collection('households')
-      .doc(householdID)
-      .collection('members')
-      .doc(userID);
+        .collection('households')
+        .doc(householdID)
+        .collection('members')
+        .doc(userID);
 
     final itemRef = _items(
       householdID: householdID,
@@ -89,11 +87,11 @@ class StuffService {
     ).doc();
 
     final item = StuffItem(
-      itemId: itemRef.id, 
+      itemId: itemRef.id,
       itemName: trimmedName,
       itemDescription: description.trim(),
-      itemStatus: status, 
-      listType: listType, 
+      itemStatus: status,
+      listType: listType,
       ownerMemberID: listType == 'private' ? userID : '',
     );
 
@@ -101,21 +99,20 @@ class StuffService {
       final membership = await transaction.get(memberRef);
       final role = membership.data()?['memberRole'];
 
-      if(!['manager', 'member', 'child'].contains(role)) {
+      if (!['manager', 'member', 'child'].contains(role)) {
         throw StateError('Your household membership could not be verified.');
       }
 
-      if (listType == 'household' &&
-        role != 'manager' && 
-        role != 'member') {
-          throw StateError('Only Managers and Members can add shared household items.',
-          );
+      if (listType == 'household' && role != 'manager' && role != 'member') {
+        throw StateError(
+          'Only Managers and Members can add shared household items.',
+        );
       }
 
-        transaction.set(itemRef, item.toMap());
+      transaction.set(itemRef, item.toMap());
     });
 
-    return itemRef.id;    
+    return itemRef.id;
   }
 
   Future<void> updateItem({
@@ -144,16 +141,16 @@ class StuffService {
     }
 
     final memberRef = _db
-      .collection('households')
-      .doc(householdID)
-      .collection('members')
-      .doc(userID);
+        .collection('households')
+        .doc(householdID)
+        .collection('members')
+        .doc(userID);
 
     final itemRef = _items(
-      householdID: householdID, 
-      listType: item.listType, 
+      householdID: householdID,
+      listType: item.listType,
       userID: userID,
-      ).doc(item.itemId);
+    ).doc(item.itemId);
 
     await _db.runTransaction<void>((transaction) async {
       final membership = await transaction.get(memberRef);
@@ -163,12 +160,13 @@ class StuffService {
         throw StateError('Your household membership could not be verified.');
       }
 
-      if (item.listType == 'household' && 
+      if (item.listType == 'household' &&
           role != 'manager' &&
           role != 'member') {
-            throw StateError('Only Managers and Members can edit shared household items.',
-            );
-        }
+        throw StateError(
+          'Only Managers and Members can edit shared household items.',
+        );
+      }
 
       final document = await transaction.get(itemRef);
       final data = document.data();
@@ -179,11 +177,12 @@ class StuffService {
 
       final expectedOwner = item.isPrivate ? userID : '';
 
-      if (data['listType'] != item.listType || data['ownerMemberID'] != expectedOwner) {
+      if (data['listType'] != item.listType ||
+          data['ownerMemberID'] != expectedOwner) {
         throw StateError('This item has inconsistent ownership information.');
       }
 
-      // Preserve the item's list and owner 
+      // Preserve the item's list and owner
       transaction.update(itemRef, {
         'itemName': name,
         'itemDescription': item.itemDescription.trim(),
@@ -200,11 +199,11 @@ class StuffService {
     final userID = _requireUserID();
     _validateList(householdID, item.listType);
 
-    if (item.itemId.isEmpty || item.itemId.contains('/')){
+    if (item.itemId.isEmpty || item.itemId.contains('/')) {
       throw StateError("A valid item ID is required.");
     }
 
-    if (!['available', 'low', 'out_of_stock'].contains(status)){
+    if (!['available', 'low', 'out_of_stock'].contains(status)) {
       throw StateError('Please choose a valid item status.');
     }
 
@@ -213,10 +212,10 @@ class StuffService {
     }
 
     final memberRef = _db
-      .collection('households')
-      .doc(householdID)
-      .collection('members')
-      .doc(userID);
+        .collection('households')
+        .doc(householdID)
+        .collection('members')
+        .doc(userID);
 
     final itemRef = _items(
       householdID: householdID,
@@ -233,23 +232,25 @@ class StuffService {
       }
 
       if (item.listType == 'household' &&
-          role != 'manager' && 
+          role != 'manager' &&
           role != 'member') {
-            throw StateError('Only Managers and Members can update shared household items.');
-          }
+        throw StateError(
+          'Only Managers and Members can update shared household items.',
+        );
+      }
 
       final document = await transaction.get(itemRef);
       final data = document.data();
 
-      if(data == null){
+      if (data == null) {
         throw StateError('This item no longer exists.');
       }
 
       final expectedOwner = item.isPrivate ? userID : '';
 
-      if (data['listType'] != item.listType || 
+      if (data['listType'] != item.listType ||
           data['ownerMemberID'] != expectedOwner) {
-            throw StateError('This item has inconsistent ownership information');
+        throw StateError('This item has inconsistent ownership information');
       }
 
       final previousStatus = data['itemStatus'];
@@ -258,9 +259,7 @@ class StuffService {
         return false;
       }
 
-      transaction.update(itemRef, {
-        'itemStatus': status,
-      });
+      transaction.update(itemRef, {'itemStatus': status});
 
       return status == 'out_of_stock';
     });
@@ -276,18 +275,13 @@ class StuffService {
       _validateList(householdID, listType);
 
       return _items(
-        householdID: householdID, 
-        listType: listType, 
+        householdID: householdID,
+        listType: listType,
         userID: userID,
       ).snapshots().map(
         (snapshot) => snapshot.docs
-          .map(
-            (document) => StuffItem.fromMap(
-              document.id,
-              document.data(),
-            ),
-      )
-      .toList(),
+            .map((document) => StuffItem.fromMap(document.id, document.data()))
+            .toList(),
       );
     } catch (error) {
       return Stream<List<StuffItem>>.error(error);
@@ -310,10 +304,10 @@ class StuffService {
     }
 
     final memberRef = _db
-      .collection('households')
-      .doc(householdID)
-      .collection('members')
-      .doc(userID);
+        .collection('households')
+        .doc(householdID)
+        .collection('members')
+        .doc(userID);
 
     final itemRef = _items(
       householdID: householdID,
@@ -321,7 +315,7 @@ class StuffService {
       userID: userID,
     ).doc(item.itemId);
 
-    await _db.runTransaction<void>((transaction) async{
+    await _db.runTransaction<void>((transaction) async {
       final membership = await transaction.get(memberRef);
       final role = membership.data()?['memberRole'];
 
@@ -394,6 +388,10 @@ class StuffService {
         .collection('items')
         .doc(groceryItemID);
 
+    final groceryListRef = householdRef
+        .collection('groceryLists')
+        .doc('default');
+
     await _db.runTransaction<void>((transaction) async {
       final membership = await transaction.get(memberRef);
       final role = membership.data()?['memberRole'];
@@ -423,13 +421,23 @@ class StuffService {
         throw StateError('This item has inconsistent ownership information.');
       }
 
-      final sourceItem = StuffItem.fromMap(
-        sourceDocument.id,
-        sourceData,
-      );
+      final sourceItem = StuffItem.fromMap(sourceDocument.id, sourceData);
 
       final groceryDocument = await transaction.get(groceryItemRef);
       final groceryData = groceryDocument.data();
+      final groceryListSnapshot = await transaction.get(groceryListRef);
+
+      final groceryListData = groceryListSnapshot.data();
+
+      if (groceryListData == null) {
+        throw StateError('Default Grocery List not found.');
+      }
+
+      final revision = groceryListData['groceryItemsRevision'];
+
+      if (revision is! int || revision < 0) {
+        throw StateError('Invalid Grocery List revision.');
+      }
 
       if (groceryData != null) {
         final currentQuantity = groceryData['groceryItemQuantity'];
@@ -442,6 +450,7 @@ class StuffService {
           'groceryItemName': sourceItem.itemName,
           'groceryItemDescription': sourceItem.itemDescription,
           'groceryItemQuantity': currentQuantity + quantity,
+          'groceryItemPurchasedQuantity': 0,
           'groceryItemStatus': 'unpurchased',
         });
       } else {
@@ -449,12 +458,18 @@ class StuffService {
           'groceryItemName': sourceItem.itemName,
           'groceryItemType': 'Other',
           'groceryItemQuantity': quantity,
+          'groceryItemPurchasedQuantity': 0,
           'groceryItemStatus': 'unpurchased',
           'groceryItemDescription': sourceItem.itemDescription,
           'sourceFoodItemID': null,
           'sourceHouseholdItemID': item.isPrivate ? null : item.itemId,
         });
       }
+
+      transaction.update(groceryListRef, {
+        'groceryItemsRevision': revision + 1,
+        'groceryListStatus': 'incomplete',
+      });
     });
   }
 }
