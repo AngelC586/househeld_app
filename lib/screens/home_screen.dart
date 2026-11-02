@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:househeld_app/screens/menu_screen.dart';
 
 import '../models.dart';
 import '../theme/app_theme.dart';
@@ -16,6 +17,8 @@ import 'tasks_screen.dart';
 import 'stuff_screen.dart';
 import 'pantry_screen.dart';
 import 'grocery_screen.dart';
+
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -94,6 +97,16 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => GroceryScreen(householdID: householdID),
+        ),
+      );
+      return;
+    }
+
+    if (index == 5) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MenuScreen(householdID: householdID),
         ),
       );
       return;
