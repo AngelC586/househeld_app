@@ -290,81 +290,263 @@ service cloud.firestore {
           && request.resource.data.listVisibility == 'shared';
       }
 
+      
       match /groceryLists/{groceryListID} {
+
+        function groceryListPath() {
+          return /databases/$(database)/documents/households/$(householdID)/groceryLists/$(groceryListID);
+        }
+
+        function validGroceryVisibility(data) {
+          return data.groceryListVisibility in ['shared', 'restricted']
+            && data.visibleMemberIDs is list
+            && data.visibleMemberIDs.size() <= 8
+            && data.visibleMemberIDs.toSet().size()
+                == data.visibleMemberIDs.size()
+            && (
+              data.groceryListVisibility == 'restricted'
+              || data.visibleMemberIDs == []
+            );
+        }
+
+        function validGroceryList(data) {
+          let fields = [
+            'groceryListName',
+            'groceryListStatus',
+            'groceryListDescription',
+            'groceryListVisibility',
+            'ownerMemberID',
+            'visibleMemberIDs',
+            'groceryItemsRevision'
+          ];
+
+          return data.keys().hasAll(fields)
+            && data.keys().hasOnly(fields)
+            && data.groceryListName is string
+            && data.groceryListName.size() > 0
+            && data.groceryListName.size() <= 200
+            && data.groceryListDescription is string
+            && data.groceryItemsRevision is int
+            && data.groceryItemsRevision >= 0
+            && data.groceryListStatus in [
+              'incomplete',
+              'complete',
+              'defaultComplete',
+              'completeNoReset'
+            ]
+            && validGroceryVisibility(data);
+        }
+
+        function validDefaultGroceryList(data) {
+          return validGroceryList(data)
+            && data.groceryListVisibility == 'shared'
+            && data.ownerMemberID == null
+            && data.visibleMemberIDs == []
+            && data.groceryListStatus in [
+              'incomplete',
+              'defaultComplete',
+              'completeNoReset'
+            ];
+        }
+
+        function validCustomGroceryList(data) {
+          return validGroceryList(data)
+            && data.groceryListStatus in ['incomplete', 'complete']
+            && data.ownerMemberID is string
+            && data.ownerMemberID.size() > 0
+            && data.ownerMemberID != 'default';
+        }
+
+        function validGroceryRevisionUpdate() {
+          let oldRevision = resource.data.groceryItemsRevision;
+          let newRevision = request.resource.data.groceryItemsRevision;
+
+          return oldRevision is int
+            && newRevision is int
+            && (
+              newRevision == oldRevision
+              || newRevision == oldRevision + 1
+            );
+        }
+
+        // Read default-list documents that were  
+        // created before new attributes were added:
+        function canViewGroceryList(data) {
+          return isMember(householdID)
+            && (
+              groceryListID == 'default'
+              || data.get('groceryListVisibility', '') == 'shared'
+              || data.get('ownerMemberID', null) == request.auth.uid
+              || request.auth.uid in data.get('visibleMemberIDs', [])
+            );
+        }
+
+        function canViewParentList() {
+          return exists(groceryListPath())
+            && canViewGroceryList(get(groceryListPath()).data);
+        }
+
+        function canCreateItemInNewList() {
+          return !exists(groceryListPath())
+            && existsAfter(groceryListPath())
+            && isMember(householdID)
+            && validCustomGroceryList(
+              getAfter(groceryListPath()).data
+            )
+            && getAfter(groceryListPath()).data.ownerMemberID
+                == request.auth.uid;
+        }
+
+        function isGroceryListOwner() {
+          return signedIn()
+            && resource.data.get('ownerMemberID', null)
+                == request.auth.uid;
+        }
+
+        // This accepts the original seven fields, plus
+        // the new optional purchased-quantity field:
         function validGroceryItem(data) {
-          return data.keys().hasAll([
-              'groceryItemName',
-              'groceryItemType',
-              'groceryItemQuantity',
-              'groceryItemStatus',
-              'groceryItemDescription',
-              'sourceFoodItemID',
-              'sourceHouseholdItemID'
-            ])
-            && data.keys().hasOnly([
-              'groceryItemName',
-              'groceryItemType',
-              'groceryItemQuantity',
-              'groceryItemStatus',
-              'groceryItemDescription',
-              'sourceFoodItemID',
-              'sourceHouseholdItemID'
-            ])
+          let originalFields = [
+            'groceryItemName',
+            'groceryItemType',
+            'groceryItemQuantity',
+            'groceryItemStatus',
+            'groceryItemDescription',
+            'sourceFoodItemID',
+            'sourceHouseholdItemID'
+          ];
+
+          return data.keys().hasAll(originalFields)
+            && data.keys().hasOnly(
+              originalFields + ['groceryItemPurchasedQuantity']
+            )
             && data.groceryItemName is string
             && data.groceryItemName.size() > 0
+            && data.groceryItemName.size() <= 200
             && data.groceryItemType is string
-            && data.groceryItemQuantity is int
-            && data.groceryItemQuantity > 0
             && data.groceryItemDescription is string
-            && data.groceryItemStatus in [
-              'unpurchased',
-              'purchased'
-            ]
+            && data.groceryItemQuantity is int
+            && data.groceryItemQuantity >= 0
+            && data.get('groceryItemPurchasedQuantity', 0) is int
+            && data.get('groceryItemPurchasedQuantity', 0) >= 0
             && (
-                  data.sourceFoodItemID == null
-                  || (
-                    data.sourceFoodItemID is string
-                    && data.sourceFoodItemID.size() > 0
-                  )
-                )
+              (
+                data.groceryItemStatus == 'unpurchased'
+                && data.groceryItemQuantity > 0
+                && data.get('groceryItemPurchasedQuantity', 0) == 0
+              )
+              ||
+              (
+                data.groceryItemStatus == 'purchased'
+                && data.groceryItemQuantity == 0
+                && data.get('groceryItemPurchasedQuantity', 0) >= 0
+              )
+            )
             && (
-                  data.sourceHouseholdItemID == null
-                  || (
-                    data.sourceHouseholdItemID is string
-                    && data.sourceHouseholdItemID.size() > 0
-                  )
-                )
+              data.sourceFoodItemID == null
+              || (
+                data.sourceFoodItemID is string
+                && data.sourceFoodItemID.size() > 0
+              )
+            )
+            && (
+              data.sourceHouseholdItemID == null
+              || (
+                data.sourceHouseholdItemID is string
+                && data.sourceHouseholdItemID.size() > 0
+              )
+            )
             && !(
               data.sourceFoodItemID != null
               && data.sourceHouseholdItemID != null
             );
         }
-        
-        allow read: if isMember(householdID);
 
-        allow create: if groceryListID == 'default'
+        // Only the owner can manage custom list data
+        // The default list belongs to the household
+        allow get, list: if canViewGroceryList(resource.data);
+
+        allow create: if (
+          groceryListID == 'default'
           && createsHousehold(householdID)
-          && request.resource.data.keys().hasOnly([
-            'groceryListName', 'groceryListVisibility', 'ownerMemberID'
-          ])
+          && validDefaultGroceryList(request.resource.data)
           && request.resource.data.groceryListName == 'Grocery List'
-          && request.resource.data.groceryListVisibility == 'shared'
-          && request.resource.data.ownerMemberID == null;
-        
+          && request.resource.data.groceryItemsRevision == 0
+        ) || (
+          groceryListID != 'default'
+          && isMember(householdID)
+          && validCustomGroceryList(request.resource.data)
+          && request.resource.data.ownerMemberID == request.auth.uid
+          && request.resource.data.groceryListStatus in [
+            'incomplete',
+            'complete'
+          ]
+          && (
+            request.resource.data.groceryListStatus != 'complete'
+            || request.resource.data.groceryItemsRevision > 0
+          )
+        );
+
+        allow update: if canViewGroceryList(resource.data)
+          && validGroceryRevisionUpdate()
+          && (
+            (
+              // Default Grocery List:
+              // Household members can update its permitted fields
+              groceryListID == 'default'
+              && isMember(householdID)
+              && request.resource.data.diff(resource.data)
+                  .affectedKeys().hasOnly([
+                    'groceryListName',
+                    'groceryListStatus',
+                    'groceryListDescription',
+                    'groceryListVisibility',
+                    'ownerMemberID',
+                    'visibleMemberIDs',
+                    'groceryItemsRevision'
+                  ])
+              && request.resource.data.get(
+                    'groceryListStatus',
+                    'incomplete'
+                  ) in [
+                    'incomplete',
+                    'defaultComplete',
+                    'completeNoReset'
+                  ]
+            )
+            ||
+            (
+              // Custom Grocery Lists:
+              groceryListID != 'default'
+              && validCustomGroceryList(request.resource.data)
+              && request.resource.data.ownerMemberID
+                  == resource.data.ownerMemberID
+              && (
+                isGroceryListOwner()
+                || request.resource.data.diff(resource.data)
+                    .affectedKeys().hasOnly([
+                      'groceryListStatus',
+                      'groceryItemsRevision'
+                    ])
+              )
+            )
+          );
+
+        allow delete: if groceryListID != 'default'
+          && isMember(householdID)
+          && isGroceryListOwner();
+
         match /items/{groceryItemID} {
-          allow read: if isMember(householdID);
+          allow read: if canViewParentList();
 
-          allow create: if isMember(householdID)
-            && validGroceryItem(
-              request.resource.data
-            );
+          allow create: if (
+            canViewParentList()
+            || canCreateItemInNewList()
+          );
 
-          allow update: if isMember(householdID)
-            && validGroceryItem(
-              request.resource.data
-            );
+          allow update: if canViewParentList();
 
-          allow delete: if isMember(householdID);
+          allow delete: if canViewParentList();
         }
       }
 

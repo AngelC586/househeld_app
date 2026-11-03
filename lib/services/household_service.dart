@@ -7,18 +7,13 @@ class HouseholdService {
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
 
-  HouseholdService({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  }) : _db = firestore ?? FirebaseFirestore.instance,
-       _auth = auth ?? FirebaseAuth.instance;
+  HouseholdService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _db = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   // Retrieve a household using its unique document ID.
   Future<Household?> getHousehold(String householdID) async {
-    final document = await _db
-        .collection('households')
-        .doc(householdID)
-        .get();
+    final document = await _db.collection('households').doc(householdID).get();
 
     final data = document.data();
 
@@ -69,8 +64,7 @@ class HouseholdService {
 
       final existingHouseholdID = userData['householdID'];
 
-      if (existingHouseholdID != null &&
-          existingHouseholdID != '') {
+      if (existingHouseholdID != null && existingHouseholdID != '') {
         throw StateError('You already belong to a household.');
       }
 
@@ -86,28 +80,24 @@ class HouseholdService {
       });
 
       // Link the user's profile to their household.
-      transaction.update(userRef, {
-        'householdID': householdRef.id,
-      });
+      transaction.update(userRef, {'householdID': householdRef.id});
 
       // Initialize the shared household-items list.
       transaction.set(
         householdRef.collection('householdItemsLists').doc('default'),
-        {
-          'listName': 'Household Items',
-          'listVisibility': 'shared',
-        },
+        {'listName': 'Household Items', 'listVisibility': 'shared'},
       );
 
       // Initialize the shared grocery list.
-      transaction.set(
-        householdRef.collection('groceryLists').doc('default'),
-        {
-          'groceryListName': 'Grocery List',
-          'groceryListVisibility': 'shared',
-          'ownerMemberID': null,
-        },
-      );
+      transaction.set(householdRef.collection('groceryLists').doc('default'), {
+        'groceryListName': 'Grocery List',
+        'groceryListStatus': 'incomplete',
+        'groceryListDescription': '',
+        'groceryListVisibility': 'shared',
+        'ownerMemberID': null,
+        'visibleMemberIDs': <String>[],
+        'groceryItemsRevision': 0,
+      });
 
       // Initialize the creator's private personal-items list.
       transaction.set(
@@ -154,8 +144,7 @@ class HouseholdService {
 
       final existingHouseholdID = userData['householdID'];
 
-      if (existingHouseholdID != null &&
-          existingHouseholdID != '') {
+      if (existingHouseholdID != null && existingHouseholdID != '') {
         throw StateError('You already belong to a household.');
       }
 
@@ -169,7 +158,8 @@ class HouseholdService {
       final memberDocument = await transaction.get(memberRef);
 
       if (memberDocument.exists) {
-        throw StateError('You already have a membership here, but your profile '
+        throw StateError(
+          'You already have a membership here, but your profile '
           'is missing its household link. Please contact your team '
           'to correct the profile.',
         );
@@ -184,9 +174,7 @@ class HouseholdService {
       });
 
       // Link the user's profile to the household.
-      transaction.update(userRef, {
-        'householdID': id,
-      });
+      transaction.update(userRef, {'householdID': id});
 
       // Give the new member a private personal-items list.
       transaction.set(
@@ -236,9 +224,7 @@ class HouseholdService {
               b.displayName.toLowerCase(),
             );
 
-            return comparison != 0
-                ? comparison
-                : a.userID.compareTo(b.userID);
+            return comparison != 0 ? comparison : a.userID.compareTo(b.userID);
           });
 
           return members;

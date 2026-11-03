@@ -9,10 +9,8 @@ import '../services/task_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import '../widgets/task_row_card.dart';
+import '../navigation/househeld_navigation.dart';
 import 'task_form_screen.dart';
-import 'pantry_screen.dart';
-import 'stuff_screen.dart';
-import 'menu_screen.dart';
 
 enum _SortField { title, assignee }
 
@@ -474,58 +472,28 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  //Screen navigation:
+  //Screen navigation method:
   void _handleNav(int index) {
-    if (index == 1) return;
-
-    if (index == 0) {
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-
-    if (index == 2) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PantryScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 3) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StuffScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grocery List - Coming Soon!')),
-      );
-    }
-
-    if (index == 5) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MenuScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
+    HouseheldNavigation.navigate(
+      context: context,
+      householdID: widget.householdID,
+      currentIndex: 1,
+      destinationIndex: index,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_membersLoading || _membersError != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Tasks & Chores')),
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back to Home',
+            onPressed: () => _handleNav(0),
+          ),
+          title: const Text('Tasks & Chores'),
+        ),
         body: Center(
           child: _membersLoading
               ? const CircularProgressIndicator()
@@ -553,6 +521,11 @@ class _TasksScreenState extends State<TasksScreen> {
         appBar: AppBar(
           backgroundColor: AppColors.forest,
           foregroundColor: Colors.white,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back to Home',
+            onPressed: () => _handleNav(0),
+          ),
           title: const Text('Tasks & Chores'),
           actions: [
             PopupMenuButton<_SortField>(
@@ -563,15 +536,6 @@ class _TasksScreenState extends State<TasksScreen> {
                 _sortMenuItem(_SortField.title, 'Title'),
                 _sortMenuItem(_SortField.assignee, 'Assignee'),
               ],
-            ),
-            IconButton(
-              icon: const Icon(Icons.menu),
-              tooltip: 'Menu',
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Menu — not built yet')),
-                );
-              },
             ),
           ],
           bottom: const TabBar(

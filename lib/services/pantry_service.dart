@@ -56,11 +56,6 @@ class PantryService {
     }
 
     await _pantryItems(householdID).doc(item.foodItemID).update(item.toMap());
-
-    await _updateLinkedGroceryDescriptions(
-      householdID: householdID,
-      item: item,
-    );
   }
 
   Future<void> updateQuantity({
@@ -93,64 +88,14 @@ class PantryService {
     required String householdID,
     required String foodItemID,
   }) async {
-    final groceryLists = await _db
-        .collection('households')
-        .doc(householdID)
-        .collection('groceryLists')
-        .get();
-
-    final batch = _db.batch();
-
-    batch.delete(_pantryItems(householdID).doc(foodItemID));
-
-    for (final groceryList in groceryLists.docs) {
-      final linkedItems = await groceryList.reference
-          .collection('items')
-          .where('sourceFoodItemID', isEqualTo: foodItemID)
-          .get();
-
-      for (final linkedItem in linkedItems.docs) {
-        batch.update(linkedItem.reference, {'sourceFoodItemID': null});
-      }
+    if (householdID.isEmpty ||
+        householdID.contains('/') ||
+        foodItemID.isEmpty ||
+        foodItemID.contains('/')) {
+      throw StateError('Valid Household and Pantry Item IDs are required.');
     }
 
-    await batch.commit();
-  }
-
-  // When a pantry item gets updated, so does its linked grocery item:
-  Future<void> _updateLinkedGroceryDescriptions({
-    required String householdID,
-    required PantryItem item,
-  }) async {
-    final groceryLists = await _db
-        .collection('households')
-        .doc(householdID)
-        .collection('groceryLists')
-        .get();
-
-    final batch = _db.batch();
-    var hasUpdates = false;
-
-    for (final groceryList in groceryLists.docs) {
-      final linkedItems = await groceryList.reference
-          .collection('items')
-          .where('sourceFoodItemID', isEqualTo: item.foodItemID)
-          .get();
-
-      for (final linkedItem in linkedItems.docs) {
-        hasUpdates = true;
-
-        batch.update(linkedItem.reference, {
-          'groceryItemName': item.foodName,
-          'groceryItemType': item.foodType,
-          'groceryItemDescription': item.foodDescription,
-        });
-      }
-    }
-
-    if (hasUpdates) {
-      await batch.commit();
-    }
+    await _pantryItems(householdID).doc(foodItemID).delete();
   }
 
   // Method for allowing a pantry item to get added to a grocery list:
@@ -174,29 +119,51 @@ class PantryService {
         .doc('pantry_${pantryItem.foodItemID}');
 
     await _db.runTransaction((transaction) async {
+      final listSnapshot = await transaction.get(groceryListRef);
+      final listData = listSnapshot.data();
+
+      if (listData == null) {
+        throw StateError('Default Grocery List not found.');
+      }
+
+      final revision = listData['groceryItemsRevision'];
+
+      if (revision is! int || revision < 0) {
+        throw StateError('Invalid Grocery List revision.');
+      }
+
       final existing = await transaction.get(groceryItemRef);
 
-      // If the item is already in a grocery list, update quantity:
+      // If this Pantry Item is already on the Grocery List,
+      // increase its existing quantity.
       if (existing.exists) {
         final currentQuantity =
             existing.data()?['groceryItemQuantity'] as int? ?? 0;
 
         transaction.update(groceryItemRef, {
           'groceryItemQuantity': currentQuantity + quantity,
-          'groceryItemStatus': 'unpurchased',
+          'groceryItemStatus': groceryItemUnpurchased,
+          'groceryItemPurchasedQuantity': 0,
         });
-
-        return;
+      } else {
+        // Otherwise, create a new linked Grocery Item.
+        transaction.set(groceryItemRef, {
+          'groceryItemName': pantryItem.foodName,
+          'groceryItemType': pantryItem.foodType,
+          'groceryItemQuantity': quantity,
+          'groceryItemPurchasedQuantity': 0,
+          'groceryItemStatus': groceryItemUnpurchased,
+          'groceryItemDescription': pantryItem.foodDescription,
+          'sourceFoodItemID': pantryItem.foodItemID,
+          'sourceHouseholdItemID': null,
+        });
       }
 
-      transaction.set(groceryItemRef, {
-        'groceryItemName': pantryItem.foodName,
-        'groceryItemType': pantryItem.foodType,
-        'groceryItemQuantity': quantity,
-        'groceryItemStatus': 'unpurchased',
-        'groceryItemDescription': pantryItem.foodDescription,
-        'sourceFoodItemID': pantryItem.foodItemID,
-        'sourceHouseholdItemID': null,
+      // Keep the parent Grocery List's revision and
+      // completion status synchronized with this change.
+      transaction.update(groceryListRef, {
+        'groceryItemsRevision': revision + 1,
+        'groceryListStatus': groceryListIncomplete,
       });
     });
   }

@@ -305,7 +305,8 @@ class StuffItem {
   final String itemDescription; // optional, may be empty
   final String itemStatus; // 'available' | 'low' | 'out_of_stock'
   final String listType; // 'household' | 'private'
-  final String ownerMemberID; // whose private list it's on (ignored for household items)
+  final String
+  ownerMemberID; // whose private list it's on (ignored for household items)
 
   const StuffItem({
     required this.itemId,
@@ -320,16 +321,13 @@ class StuffItem {
 
   bool get isOutOfStock => itemStatus == 'out_of_stock';
 
-  factory StuffItem.fromMap(
-    String itemId,
-    Map<String, dynamic> data,
-  ) {
+  factory StuffItem.fromMap(String itemId, Map<String, dynamic> data) {
     return StuffItem(
-      itemId: itemId, 
-      itemName: data['itemName'] as String? ?? '', 
+      itemId: itemId,
+      itemName: data['itemName'] as String? ?? '',
       itemDescription: data['itemDescription'] as String? ?? '',
       itemStatus: data['itemStatus'] as String? ?? 'available',
-      listType: data['listType'] as String, 
+      listType: data['listType'] as String,
       ownerMemberID: data['ownerMemberID'] as String,
     );
   }
@@ -356,6 +354,133 @@ class StuffItem {
       ownerMemberID: ownerMemberID,
     );
   }
+}
+
+// Grocery List model:
+const groceryListIncomplete = 'incomplete';
+const groceryListComplete = 'complete';
+const groceryListDefaultComplete = 'defaultComplete';
+const groceryListCompleteNoReset = 'completeNoReset';
+
+class GroceryList {
+  final String groceryListID;
+  final String groceryListName;
+  final String groceryListStatus;
+  final String groceryListDescription;
+  final String groceryListVisibility;
+  final String? ownerMemberID;
+  final List<String> visibleMemberIDs;
+  final int groceryItemsRevision;
+
+  const GroceryList({
+    required this.groceryListID,
+    required this.groceryListName,
+    this.groceryListStatus = groceryListIncomplete,
+    this.groceryListDescription = '',
+    this.groceryListVisibility = 'restricted',
+    this.ownerMemberID,
+    this.visibleMemberIDs = const [],
+    this.groceryItemsRevision = 0,
+  });
+
+  bool get isDefault => groceryListID == 'default';
+
+  bool get isComplete => groceryListStatus != groceryListIncomplete;
+
+  bool canView(String memberID) {
+    return groceryListVisibility == 'shared' ||
+        ownerMemberID == memberID ||
+        visibleMemberIDs.contains(memberID);
+  }
+
+  factory GroceryList.fromMap(String id, Map<String, dynamic> data) {
+    return GroceryList(
+      groceryListID: id,
+      groceryListName: data['groceryListName'] as String? ?? '',
+      groceryListStatus:
+          data['groceryListStatus'] as String? ?? groceryListIncomplete,
+      groceryListDescription: data['groceryListDescription'] as String? ?? '',
+      groceryListVisibility:
+          data['groceryListVisibility'] as String? ?? 'restricted',
+      ownerMemberID: data['ownerMemberID'] as String?,
+      visibleMemberIDs: List<String>.from(
+        data['visibleMemberIDs'] as List? ?? const [],
+      ),
+      groceryItemsRevision: data['groceryItemsRevision'] as int? ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'groceryListName': groceryListName,
+    'groceryListStatus': groceryListStatus,
+    'groceryListDescription': groceryListDescription,
+    'groceryListVisibility': groceryListVisibility,
+    'ownerMemberID': ownerMemberID,
+    'visibleMemberIDs': visibleMemberIDs,
+    'groceryItemsRevision': groceryItemsRevision,
+  };
+}
+
+// Grocery Item model:
+const groceryItemUnpurchased = 'unpurchased';
+const groceryItemPurchased = 'purchased';
+
+class GroceryItem {
+  final String groceryItemID;
+  final String groceryItemName;
+  final String groceryItemType;
+  final int groceryItemQuantity;
+  final int groceryItemPurchasedQuantity;
+  final String groceryItemStatus;
+  final String groceryItemDescription;
+  final String? sourceFoodItemID;
+  final String? sourceHouseholdItemID;
+
+  const GroceryItem({
+    required this.groceryItemID,
+    required this.groceryItemName,
+    required this.groceryItemType,
+    this.groceryItemQuantity = 1,
+    this.groceryItemPurchasedQuantity = 0,
+    this.groceryItemStatus = groceryItemUnpurchased,
+    this.groceryItemDescription = '',
+    this.sourceFoodItemID,
+    this.sourceHouseholdItemID,
+  });
+
+  bool get isPurchased => groceryItemStatus == groceryItemPurchased;
+
+  bool get hasSource =>
+      sourceFoodItemID != null || sourceHouseholdItemID != null;
+
+  String get displayStatus => isPurchased ? 'Purchased' : 'Unpurchased';
+
+  factory GroceryItem.fromMap(String id, Map<String, dynamic> data) {
+    return GroceryItem(
+      groceryItemID: id,
+      groceryItemName: data['groceryItemName'] as String? ?? '',
+      groceryItemType: data['groceryItemType'] as String? ?? 'Other',
+      groceryItemQuantity: data['groceryItemQuantity'] as int? ?? 1,
+      groceryItemPurchasedQuantity:
+          data['groceryItemPurchasedQuantity'] as int? ?? 0,
+      groceryItemStatus:
+          data['groceryItemStatus'] as String? ?? groceryItemUnpurchased,
+      groceryItemDescription: data['groceryItemDescription'] as String? ?? '',
+      sourceFoodItemID: data['sourceFoodItemID'] as String?,
+      sourceHouseholdItemID: data['sourceHouseholdItemID'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'groceryItemName': groceryItemName,
+    'groceryItemType': groceryItemType,
+    'groceryItemQuantity': groceryItemQuantity,
+    'groceryItemPurchasedQuantity': groceryItemPurchasedQuantity,
+    'groceryItemStatus': groceryItemStatus,
+    'groceryItemDescription': groceryItemDescription,
+    'sourceFoodItemID': sourceFoodItemID,
+    'sourceHouseholdItemID': sourceHouseholdItemID,
+  };
 }
 
 class ActivityEntry {

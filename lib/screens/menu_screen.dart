@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/member_card.dart';
 import '../widgets/househeld_bottom_nav.dart';
-import 'tasks_screen.dart';
-import 'pantry_screen.dart';
-import 'stuff_screen.dart';
+import '../navigation/househeld_navigation.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key, required this.householdID});
@@ -27,7 +26,8 @@ class _MenuScreenState extends State<MenuScreen> {
 
   final List<HouseholdMember> _members = const [];
 
-  final Map<String, (String username, String email)> _sampleContactInfo = const {};
+  final Map<String, (String username, String email)> _sampleContactInfo =
+      const {};
 
   String _memberName(String uid) {
     if (uid.isEmpty) return 'Not set';
@@ -38,38 +38,12 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   void _handleNav(int index) {
-    if (index == 5) return; // already on Menu
-
-    if (index == 0) {
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-    if (index == 1) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => TasksScreen(householdID: widget.householdID)),
-      );
-      return;
-    }
-    if (index == 2) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => PantryScreen(householdID: widget.householdID)),
-      );
-      return;
-    }
-    if (index == 3) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => StuffScreen(householdID: widget.householdID)),
-      );
-      return;
-    }
-    if (index == 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grocery List - Coming Soon!')),
-      );
-    }
+    HouseheldNavigation.navigate(
+      context: context,
+      householdID: widget.householdID,
+      currentIndex: 5,
+      destinationIndex: index,
+    );
   }
 
   void _showMemberMenu(HouseholdMember member) {
@@ -85,7 +59,10 @@ class _MenuScreenState extends State<MenuScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.visibility_outlined, color: AppColors.forest),
+              leading: const Icon(
+                Icons.visibility_outlined,
+                color: AppColors.forest,
+              ),
               title: const Text('View Member'),
               onTap: () {
                 Navigator.pop(context);
@@ -102,7 +79,10 @@ class _MenuScreenState extends State<MenuScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.person_remove_outlined, color: AppColors.clay),
+                leading: const Icon(
+                  Icons.person_remove_outlined,
+                  color: AppColors.clay,
+                ),
                 title: const Text('Remove Member'),
                 onTap: () {
                   Navigator.pop(context);
@@ -168,17 +148,21 @@ class _MenuScreenState extends State<MenuScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Current role: ${memberRoleLabel(member.memberRole)}', style: AppText.bodySoft),
+              Text(
+                'Current role: ${memberRoleLabel(member.memberRole)}',
+                style: AppText.bodySoft,
+              ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
-                value: selectedRole,
+                initialValue: selectedRole,
                 decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: const [
                   DropdownMenuItem(value: 'manager', child: Text('Manager')),
                   DropdownMenuItem(value: 'member', child: Text('Member')),
                   DropdownMenuItem(value: 'child', child: Text('Child')),
                 ],
-                onChanged: (v) => setDialogState(() => selectedRole = v ?? selectedRole),
+                onChanged: (v) =>
+                    setDialogState(() => selectedRole = v ?? selectedRole),
               ),
             ],
           ),
@@ -199,7 +183,11 @@ class _MenuScreenState extends State<MenuScreen> {
     if (newRole == null || newRole == member.memberRole || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${member.displayName}\'s role changed to ${memberRoleLabel(newRole)}.')),
+      SnackBar(
+        content: Text(
+          '${member.displayName}\'s role changed to ${memberRoleLabel(newRole)}.',
+        ),
+      ),
     );
   }
 
@@ -224,9 +212,9 @@ class _MenuScreenState extends State<MenuScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${member.displayName} removed.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${member.displayName} removed.')));
   }
 
   Widget _buildHouseholdTab() {
@@ -273,21 +261,28 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Widget _buildAccountTab() {
-    final HouseholdMember? me =
-        _members.isEmpty ? null : _members.firstWhere((m) => m.userID == _currentUserID, orElse: () => _members.first);
+    final HouseholdMember? me = _members.isEmpty
+        ? null
+        : _members.firstWhere(
+            (m) => m.userID == _currentUserID,
+            orElse: () => _members.first,
+          );
     final contact = me == null ? null : _sampleContactInfo[me.userID];
 
     void notBuiltYet() {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not wired up yet.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Not wired up yet.')));
     }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
         _accountField('Username', contact?.$1 ?? 'Not set', notBuiltYet),
-        _accountField('Display Name', me?.displayName ?? 'Not set', notBuiltYet),
+        _accountField(
+          'Display Name',
+          me?.displayName ?? 'Not set',
+          notBuiltYet,
+        ),
         _accountField('Email', contact?.$2 ?? 'Not set', notBuiltYet),
         const SizedBox(height: 10),
         OutlinedButton(
@@ -325,7 +320,10 @@ class _MenuScreenState extends State<MenuScreen> {
                 const SizedBox(height: 4),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(10),
@@ -424,7 +422,8 @@ class _MenuScreenState extends State<MenuScreen> {
           foregroundColor: Colors.white,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
+            tooltip: 'Back to Home',
+            onPressed: () => _handleNav(0),
           ),
           title: const Text('Menu'),
           bottom: const TabBar(
@@ -439,10 +438,7 @@ class _MenuScreenState extends State<MenuScreen> {
         ),
         body: SafeArea(
           child: TabBarView(
-            children: [
-              _buildHouseholdTab(),
-              _buildAccountTab(),
-            ],
+            children: [_buildHouseholdTab(), _buildAccountTab()],
           ),
         ),
         bottomNavigationBar: HouseheldBottomNav(
