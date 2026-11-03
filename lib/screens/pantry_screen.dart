@@ -7,11 +7,8 @@ import '../services/pantry_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import '../widgets/pantry_row_card.dart';
+import '../navigation/househeld_navigation.dart';
 import 'pantry_form_screen.dart';
-import 'tasks_screen.dart';
-import 'stuff_screen.dart';
-import 'menu_screen.dart';
-import 'grocery_screen.dart';
 
 // Sorting options:
 enum _PantrySortField { name, type, quantity }
@@ -467,39 +464,12 @@ class _PantryScreenState extends State<PantryScreen> {
 
   // Screen navigation
   void _handleNav(int index) {
-    if (index == 2) return; // Already on Pantry
-
-    if (index == 0) {
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-
-    if (index == 1) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TasksScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 3) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StuffScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Grocery List - Coming Soon!')),
-      );
-      return;
-    }
+    HouseheldNavigation.navigate(
+      context: context,
+      householdID: widget.householdID,
+      currentIndex: 2,
+      destinationIndex: index,
+    );
   }
 
   // Main Pantry Screen UI:
@@ -510,14 +480,29 @@ class _PantryScreenState extends State<PantryScreen> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Pantry')),
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back to Home',
+                onPressed: () => _handleNav(0),
+              ),
+              title: const Text('Pantry'),
+            ),
             body: const Center(child: Text('Unable to load Pantry Items...')),
           );
         }
 
         if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back to Home',
+                onPressed: () => _handleNav(0),
+              ),
+              title: const Text('Pantry'),
+            ),
+            body: const Center(child: CircularProgressIndicator()),
           );
         }
 
@@ -535,7 +520,8 @@ class _PantryScreenState extends State<PantryScreen> {
               foregroundColor: Colors.white,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.pop(context),
+                tooltip: 'Back to Home',
+                onPressed: () => _handleNav(0),
               ),
               title: const Text('Pantry'),
               actions: [
@@ -548,16 +534,6 @@ class _PantryScreenState extends State<PantryScreen> {
                     _sortMenuItem(_PantrySortField.type, 'Type'),
                     _sortMenuItem(_PantrySortField.quantity, 'Quantity'),
                   ],
-                ),
-
-                IconButton(
-                  icon: const Icon(Icons.menu),
-                  tooltip: 'Menu',
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Menu - Coming Soon!')),
-                    );
-                  },
                 ),
               ],
               bottom: const TabBar(

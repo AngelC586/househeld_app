@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:househeld_app/screens/menu_screen.dart';
 
 import '../models.dart';
 import '../theme/app_theme.dart';
@@ -9,16 +8,13 @@ import '../widgets/low_stock_row.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/task_row_card.dart';
 import '../widgets/zero_state.dart';
+import '../navigation/househeld_navigation.dart';
 import '../services/household_service.dart';
 import '../services/task_service.dart';
 import '../services/pantry_service.dart';
 import '../services/stuff_service.dart';
-import 'tasks_screen.dart';
-import 'stuff_screen.dart';
-import 'pantry_screen.dart';
-import 'grocery_screen.dart';
 
-
+//import '../services/grocery_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -44,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final PantryService _pantryService = PantryService();
   final StuffService _stuffService = StuffService();
 
-  // Screen navigation:
+  // Screen navigation method:
   void _handleNav(int index) {
     if (index == 0) return;
 
@@ -62,55 +58,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    if (index == 1) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TasksScreen(householdID: householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 2) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PantryScreen(householdID: householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 3) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StuffScreen(householdID: householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 4) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => GroceryScreen(householdID: householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 5) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MenuScreen(householdID: householdID),
-        ),
-      );
-      return;
-    }
+    // Call HouseheldNavigation class to navigate:
+    HouseheldNavigation.navigate(
+      context: context,
+      householdID: householdID,
+      currentIndex: 0,
+      destinationIndex: index,
+    );
   }
 
   // Get household members:

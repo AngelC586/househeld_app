@@ -5,12 +5,10 @@ import '../services/grocery_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/grocery_row_card.dart';
 import '../widgets/househeld_bottom_nav.dart';
+import '../navigation/househeld_navigation.dart';
 import 'grocery_list_form_screen.dart';
 import 'grocery_items_screen.dart';
 import 'shopping_screen.dart';
-import 'pantry_screen.dart';
-import 'stuff_screen.dart';
-import 'tasks_screen.dart';
 
 enum _ListSort { name, size }
 
@@ -304,42 +302,12 @@ class _GroceryScreenState extends State<GroceryScreen> {
 
   // Navigation handling method:
   void _handleNav(int index) {
-    if (index == 4) return;
-
-    if (index == 0) {
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-
-    if (index == 1) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TasksScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 2) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PantryScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 3) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StuffScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
+    HouseheldNavigation.navigate(
+      context: context,
+      householdID: widget.householdID,
+      currentIndex: 4,
+      destinationIndex: index,
+    );
   }
 
   // Sorting method:
@@ -453,6 +421,11 @@ class _GroceryScreenState extends State<GroceryScreen> {
             appBar: AppBar(
               backgroundColor: AppColors.forest,
               foregroundColor: Colors.white,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Back to Home',
+                onPressed: () => _handleNav(0),
+              ),
               title: const Text('Grocery Lists'),
               actions: [
                 PopupMenuButton<_ListSort>(

@@ -7,13 +7,10 @@ import '../theme/app_theme.dart';
 import '../widgets/stuff_item_row.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import '../services/stuff_service.dart';
-import 'tasks_screen.dart';
-import 'pantry_screen.dart';
-import 'grocery_screen.dart';
+import '../navigation/househeld_navigation.dart';
 import 'stuff_item_form_screen.dart';
 
 import 'dart:async';
-import 'menu_screen.dart';
 
 enum _ListType { household, private }
 
@@ -517,52 +514,12 @@ class _StuffScreenState extends State<StuffScreen> {
 
   // Screen navigation:
   void _handleNav(int index) {
-    if (index == 3) return;
-
-    if (index == 0) {
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-
-    if (index == 1) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TasksScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 2) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PantryScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 4) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => GroceryScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
-
-    if (index == 5) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MenuScreen(householdID: widget.householdID),
-        ),
-      );
-      return;
-    }
+    HouseheldNavigation.navigate(
+      context: context,
+      householdID: widget.householdID,
+      currentIndex: 3,
+      destinationIndex: index,
+    );
   }
 
   @override
@@ -586,7 +543,8 @@ class _StuffScreenState extends State<StuffScreen> {
         foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          tooltip: 'Back to Home',
+          onPressed: () => _handleNav(0),
         ),
         title: const Text('Stuff'),
         actions: [
@@ -596,15 +554,6 @@ class _StuffScreenState extends State<StuffScreen> {
             ),
             tooltip: _sortAscending ? 'Sort: A to Z' : 'Sort: Z to A',
             onPressed: () => setState(() => _sortAscending = !_sortAscending),
-          ),
-          IconButton(
-            icon: const Icon(Icons.menu),
-            tooltip: 'Menu',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Menu — not built yet')),
-              );
-            },
           ),
         ],
       ),
