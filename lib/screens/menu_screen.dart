@@ -1,10 +1,13 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models.dart';
-import '../theme/app_theme.dart';
-import '../widgets/member_card.dart';
-import '../widgets/househeld_bottom_nav.dart';
 import '../navigation/househeld_navigation.dart';
+import '../services/account_service.dart';
+import '../services/household_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/househeld_bottom_nav.dart';
+import '../widgets/member_card.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key, required this.householdID});
@@ -16,28 +19,32 @@ class MenuScreen extends StatefulWidget {
 }
 
 class _MenuScreenState extends State<MenuScreen> {
-  final String _currentUserID = '';
+  final HouseholdService _householdService = HouseholdService();
+  final AccountService _accountService = AccountService();
 
-  late final Household _household = Household(
-    householdID: widget.householdID,
-    householdName: '',
-    creatorID: '',
-  );
+  late final Stream<Household?> _householdStream;
+  late final Stream<List<HouseholdMember>> _membersStream;
+  late final Stream<UserProfile?> _profileStream;
 
-  final List<HouseholdMember> _members = const [];
+  bool _busy = false;
 
-  final Map<String, (String username, String email)> _sampleContactInfo =
-      const {};
+  String? get _currentUserID => FirebaseAuth.instance.currentUser?.uid;
 
-  String _memberName(String uid) {
-    if (uid.isEmpty) return 'Not set';
-    for (final m in _members) {
-      if (m.userID == uid) return m.displayName;
-    }
-    return uid;
+  @override
+  void initState() {
+    super.initState();
+
+    _householdStream = _householdService.watchHousehold(widget.householdID);
+
+    _membersStream = _householdService.watchMembers(widget.householdID);
+
+    _profileStream = _accountService.watchCurrentProfile();
   }
 
+  // Method to handle navigation:
   void _handleNav(int index) {
+    if (_busy) return;
+
     HouseheldNavigation.navigate(
       context: context,
       householdID: widget.householdID,
@@ -46,82 +53,117 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  void _showMemberMenu(HouseholdMember member) {
-    final isSelf = member.userID == _currentUserID;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(
-                Icons.visibility_outlined,
-                color: AppColors.forest,
-              ),
-              title: const Text('View Member'),
-              onTap: () {
-                Navigator.pop(context);
-                _showViewMember(member);
-              },
-            ),
-            if (!isSelf) ...[
-              ListTile(
-                leading: const Icon(Icons.swap_horiz, color: AppColors.forest),
-                title: const Text('Change Role'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showChangeRole(member);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.person_remove_outlined,
-                  color: AppColors.clay,
+  // Method to display messages:
+  void _message(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // Error handling method:
+  String _errorMessage(Object error) {
+    if (error is StateError) {
+      return error.message.toString();
+    }
+
+    if (error is ArgumentError) {
+      return error.message?.toString() ?? 'Invalid information.';
+    }
+
+    if (error is FirebaseException) {
+      if (error.code == 'permission-denied') {
+        return 'You do not have permission to perform this action.';
+      }
+
+      return error.message ?? 'A database error occurred. Please try again.';
+    }
+
+    return 'Something went wrong. Please try again.';
+  }
+
+  // Reusable method to execute actions:
+  Future<bool> _runAction(
+    Future<void> Function() action, {
+    String? successMessage,
+    bool returnHome = false,
+  }) async {
+    if (_busy) return false;
+
+    setState(() {
+      _busy = true;
+    });
+
+    try {
+      await action();
+
+      if (!mounted) return true;
+
+      if (returnHome) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else if (successMessage != null) {
+        _message(successMessage);
+      }
+
+      return true;
+    } catch (error) {
+      _message(_errorMessage(error));
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  // Reusable confirmation dialog method:
+  Future<bool> _confirm({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    bool destructive = false,
+  }) async {
+    if (!mounted) return false;
+
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: Text(title),
+              content: Text(message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
                 ),
-                title: const Text('Remove Member'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showRemoveMember(member);
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
+                FilledButton(
+                  style: destructive
+                      ? FilledButton.styleFrom(backgroundColor: AppColors.clay)
+                      : null,
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(confirmLabel),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
-  void _showViewMember(HouseholdMember member) {
-    final contact = _sampleContactInfo[member.userID];
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Member Info'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _infoRow('Display Name', member.displayName),
-            _infoRow('Role', memberRoleLabel(member.memberRole)),
-            _infoRow('Username', contact?.$1 ?? 'Not available yet'),
-            _infoRow('Email', contact?.$2 ?? 'Not available yet'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
+  // Get member name:
+  String _memberName(String userID, List<HouseholdMember> members) {
+    for (final member in members) {
+      if (member.userID == userID) {
+        return member.displayName.isEmpty ? member.userID : member.displayName;
+      }
+    }
+
+    return userID.isEmpty ? 'Not set' : userID;
   }
 
+  // Widget for the household info card:
   Widget _infoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -129,101 +171,327 @@ class _MenuScreenState extends State<MenuScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: AppText.label),
-          const SizedBox(height: 2),
-          Text(value.isEmpty ? 'Not set' : value, style: AppText.body),
+          const SizedBox(height: 3),
+          SelectableText(
+            value.trim().isEmpty ? 'Not set' : value,
+            style: AppText.body,
+          ),
         ],
       ),
     );
   }
 
-  Future<void> _showChangeRole(HouseholdMember member) async {
+  // Method for the rename household pop-up:
+  Future<void> _renameHousehold(Household household) async {
+    if (_busy) return;
+
+    String newName = household.householdName;
+
+    final submittedName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Rename Household'),
+          content: TextFormField(
+            initialValue: household.householdName,
+            autofocus: true,
+            maxLength: 100,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Household Name',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              newName = value;
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, newName.trim());
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || submittedName == null) return;
+
+    if (submittedName == household.householdName) return;
+
+    await _runAction(
+      () => _householdService.renameHousehold(
+        householdID: widget.householdID,
+        newName: submittedName,
+      ),
+      successMessage: 'Household name updated!',
+    );
+  }
+
+  // Method for viewing member details (from options sub-menu):
+  Future<void> _viewMember(HouseholdMember member) async {
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Member Details'),
+          content: FutureBuilder<UserProfile?>(
+            future: _accountService.getMemberProfile(member.userID),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text('Unable to load member details.');
+              }
+
+              if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 60,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                return const Text('Member profile not found.');
+              }
+
+              final profile = snapshot.data!;
+
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _infoRow('Display Name', member.displayName),
+                    _infoRow('Role', memberRoleLabel(member.memberRole)),
+                    _infoRow('Username', profile.username),
+                    _infoRow('Email', profile.email),
+                  ],
+                ),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Method for the changing a member's role dialog (Managers only):
+  Future<void> _changeRole(HouseholdMember member) async {
+    if (_busy) return;
+
     String selectedRole = member.memberRole;
 
     final newRole = await showDialog<String>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Change Role — ${member.displayName}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Current role: ${memberRoleLabel(member.memberRole)}',
-                style: AppText.bodySoft,
-              ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                initialValue: selectedRole,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(value: 'manager', child: Text('Manager')),
-                  DropdownMenuItem(value: 'member', child: Text('Member')),
-                  DropdownMenuItem(value: 'child', child: Text('Child')),
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Change Role — ${member.displayName}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Current role: '
+                    '${memberRoleLabel(member.memberRole)}',
+                    style: AppText.bodySoft,
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedRole,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'manager',
+                        child: Text('Manager'),
+                      ),
+                      DropdownMenuItem(value: 'member', child: Text('Member')),
+                      DropdownMenuItem(value: 'child', child: Text('Child')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedRole = value;
+                        });
+                      }
+                    },
+                  ),
                 ],
-                onChanged: (v) =>
-                    setDialogState(() => selectedRole = v ?? selectedRole),
               ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, selectedRole),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || newRole == null || newRole == member.memberRole) {
+      return;
+    }
+
+    final confirmed = await _confirm(
+      title: 'Confirm Role Change',
+      message:
+          'Change ${member.displayName} from '
+          '${memberRoleLabel(member.memberRole)} to '
+          '${memberRoleLabel(newRole)}?',
+      confirmLabel: 'Change Role',
+    );
+
+    if (!mounted || !confirmed) return;
+
+    final success = await _runAction(
+      () => _householdService.changeMemberRole(
+        householdID: widget.householdID,
+        memberID: member.userID,
+        newRole: newRole,
+      ),
+      successMessage: 'Member role updated!',
+    );
+
+    if (success &&
+        mounted &&
+        member.userID == _currentUserID &&
+        newRole != 'manager') {
+      // The current user no longer has Manager permissions.
+      // The streams should update the UI automatically.
+    }
+  }
+
+  // Method for the removing a member dialog (Managers only):
+  Future<void> _removeMember(HouseholdMember member) async {
+    if (_busy) return;
+
+    final confirmed = await _confirm(
+      title: 'Remove Household Member?',
+      message:
+          'Are you sure you want to remove ${member.displayName} '
+          'from this household?\n\n'
+          'Their account will remain active, but they '
+          'will lose access to this household!',
+      confirmLabel: 'Remove Member',
+      destructive: true,
+    );
+
+    if (!mounted || !confirmed) return;
+
+    await _runAction(
+      () => _householdService.removeMember(
+        householdID: widget.householdID,
+        memberID: member.userID,
+      ),
+      successMessage: 'Member removed from household.',
+    );
+  }
+
+  // Method for the leaving a household dialog:
+  Future<void> _leaveHousehold() async {
+    if (_busy) return;
+
+    final confirmed = await _confirm(
+      title: 'Leave Household?',
+      message:
+          'You will lose access to this household and '
+          'and may need to join or create a new one.\n\n'
+          'Your account will not be deleted.',
+      confirmLabel: 'Leave Household',
+      destructive: true,
+    );
+
+    if (!mounted || !confirmed) return;
+
+    await _runAction(
+      () => _householdService.leaveHousehold(householdID: widget.householdID),
+      returnHome: true,
+    );
+  }
+
+  void _showMemberMenu(HouseholdMember member) {
+    if (_busy) return;
+
+    final isSelf = member.userID == _currentUserID;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.visibility_outlined),
+                title: const Text('View Member Details'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _viewMember(member);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.swap_horiz),
+                title: const Text('Change Role'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _changeRole(member);
+                },
+              ),
+              if (!isSelf)
+                ListTile(
+                  leading: const Icon(
+                    Icons.person_remove_outlined,
+                    color: AppColors.clay,
+                  ),
+                  title: const Text('Remove Member'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _removeMember(member);
+                  },
+                ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, selectedRole),
-              child: const Text('Change'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (newRole == null || newRole == member.memberRole || !mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${member.displayName}\'s role changed to ${memberRoleLabel(newRole)}.',
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Future<void> _showRemoveMember(HouseholdMember member) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(member.displayName),
-        content: const Text('Are you sure you want to remove this member?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes'),
-          ),
-        ],
-      ),
-    );
+  // Widget for the 'Household' tab:
+  Widget _buildHouseholdTab(
+    Household household,
+    List<HouseholdMember> members,
+    HouseholdMember currentMember,
+  ) {
+    final isManager = currentMember.isManager;
+    final canLeave = currentMember.isManager || currentMember.isMember;
 
-    if (confirmed != true || !mounted) return;
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('${member.displayName} removed.')));
-  }
-
-  Widget _buildHouseholdTab() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
-        // Household Info Card
         Container(
-          width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: AppColors.surfaceSunken,
@@ -235,78 +503,65 @@ class _MenuScreenState extends State<MenuScreen> {
             children: [
               Text('HOUSEHOLD INFO', style: AppText.label),
               const SizedBox(height: 12),
-              _infoRow('Household ID', _household.householdID),
-              _infoRow('Household Name', _household.householdName),
-              _infoRow('Household Creator', _memberName(_household.creatorID)),
+
+              _infoRow('Household ID', household.householdID),
+              _infoRow('Household Name', household.householdName),
+              _infoRow(
+                'Household Creator',
+                _memberName(household.creatorID, members),
+              ),
+
+              if (isManager) ...[
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _renameHousehold(household),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Rename Household'),
+                ),
+              ],
             ],
           ),
         ),
+
         const SizedBox(height: 20),
+
         Text('MEMBERS', style: AppText.label),
         const SizedBox(height: 10),
-        if (_members.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text('No members yet.', style: AppText.bodySoft),
-          )
-        else
-          for (var i = 0; i < _members.length; i++)
-            MemberCard(
-              member: _members[i],
-              colorSeed: i,
-              onMenu: () => _showMemberMenu(_members[i]),
-            ),
+
+        for (var i = 0; i < members.length; i++)
+          MemberCard(
+            member: members[i],
+            colorSeed: i,
+            onMenu: isManager && !_busy
+                ? () => _showMemberMenu(members[i])
+                : null,
+            onChangeRole: isManager && !_busy
+                ? () => _changeRole(members[i])
+                : null,
+          ),
+
+        const SizedBox(height: 20),
+
+        if (canLeave)
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _leaveHousehold,
+            icon: const Icon(Icons.logout),
+            label: const Text('Leave Household'),
+            style: OutlinedButton.styleFrom(foregroundColor: AppColors.clay),
+          ),
+
+        if (isManager) ...[
+          const SizedBox(height: 12),
+          const Text(
+            'Household deletion is not ready yet!',
+            textAlign: TextAlign.center,
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildAccountTab() {
-    final HouseholdMember? me = _members.isEmpty
-        ? null
-        : _members.firstWhere(
-            (m) => m.userID == _currentUserID,
-            orElse: () => _members.first,
-          );
-    final contact = me == null ? null : _sampleContactInfo[me.userID];
-
-    void notBuiltYet() {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Not wired up yet.')));
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-      children: [
-        _accountField('Username', contact?.$1 ?? 'Not set', notBuiltYet),
-        _accountField(
-          'Display Name',
-          me?.displayName ?? 'Not set',
-          notBuiltYet,
-        ),
-        _accountField('Email', contact?.$2 ?? 'Not set', notBuiltYet),
-        const SizedBox(height: 10),
-        OutlinedButton(
-          onPressed: notBuiltYet,
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            side: const BorderSide(color: AppColors.line),
-          ),
-          child: Text('Change Password', style: AppText.body),
-        ),
-        const SizedBox(height: 28),
-        OutlinedButton(
-          onPressed: () => _confirmDeleteAccount(),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            foregroundColor: Colors.red,
-            side: const BorderSide(color: Colors.red),
-          ),
-          child: const Text('Delete Account'),
-        ),
-      ],
-    );
-  }
-
+  // Widget for displaying account info:
   Widget _accountField(String label, String value, VoidCallback onEdit) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -320,24 +575,23 @@ class _MenuScreenState extends State<MenuScreen> {
                 const SizedBox(height: 4),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: AppColors.line),
                   ),
-                  child: Text(value, style: AppText.body),
+                  child: Text(
+                    value.isEmpty ? 'Not set' : value,
+                    style: AppText.body,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.edit_outlined, color: AppColors.forestDeep),
             onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined),
             tooltip: 'Change $label',
           ),
         ],
@@ -345,73 +599,127 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Future<void> _confirmDeleteAccount() async {
-    final firstOkay = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete your account?'),
-        content: const Text(
-          'This will permanently delete your account and cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
+  // Widget for the 'Account' tab:
+  Widget _buildAccountTab() {
+    return StreamBuilder<UserProfile?>(
+      stream: _profileStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(child: Text('Unable to load account data.'));
+        }
 
-    if (firstOkay != true || !mounted) return;
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    final typeController = TextEditingController();
-    final finalOkay = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Are you absolutely sure?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Type DELETE to confirm.'),
-              const SizedBox(height: 10),
-              TextField(
-                controller: typeController,
-                onChanged: (_) => setDialogState(() {}),
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+        final profile = snapshot.data!;
+
+        void notBuiltYet() {
+          _message('Not ready yet!!!');
+        }
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+          children: [
+            _accountField('Username', profile.username, notBuiltYet),
+            _accountField('Display Name', profile.displayName, notBuiltYet),
+            _accountField('Email', profile.email, notBuiltYet),
+
+            const SizedBox(height: 12),
+
+            OutlinedButton(
+              onPressed: notBuiltYet,
+              child: const Text('Change Password'),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: typeController.text.trim() == 'DELETE'
-                  ? () => Navigator.pop(context, true)
-                  : null,
+
+            const SizedBox(height: 16),
+
+            OutlinedButton(
+              onPressed: notBuiltYet,
+              child: const Text('Customize Avatar'),
+            ),
+
+            const SizedBox(height: 24),
+
+            OutlinedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () => _runAction(_accountService.signOut, returnHome: true),
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign Out'),
+            ),
+
+            const SizedBox(height: 12),
+
+            OutlinedButton(
+              onPressed: notBuiltYet,
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Delete Account'),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
-
-    if (finalOkay == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account deletion is not wired up yet.')),
-      );
-    }
   }
 
+  // Widget for displaying household info from the database:
+  Widget _buildHouseholdContent() {
+    return StreamBuilder<Household?>(
+      stream: _householdStream,
+      builder: (context, householdSnapshot) {
+        if (householdSnapshot.hasError) {
+          return const Center(child: Text('Unable to load household.'));
+        }
+
+        if (!householdSnapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final household = householdSnapshot.data!;
+
+        return StreamBuilder<List<HouseholdMember>>(
+          stream: _membersStream,
+          builder: (context, membersSnapshot) {
+            if (membersSnapshot.hasError) {
+              return const Center(
+                child: Text('Unable to load household members.'),
+              );
+            }
+
+            if (!membersSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final members = membersSnapshot.data!;
+            final uid = _currentUserID;
+
+            if (uid == null) {
+              return const Center(child: Text('Please sign in again.'));
+            }
+
+            HouseholdMember? currentMember;
+
+            for (final member in members) {
+              if (member.userID == uid) {
+                currentMember = member;
+                break;
+              }
+            }
+
+            if (currentMember == null) {
+              return const Center(
+                child: Text('Your household membership was not found.'),
+              );
+            }
+
+            return _buildHouseholdTab(household, members, currentMember);
+          },
+        );
+      },
+    );
+  }
+
+  // Actual Menu Screen UI:
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -436,10 +744,13 @@ class _MenuScreenState extends State<MenuScreen> {
             ],
           ),
         ),
-        body: SafeArea(
-          child: TabBarView(
-            children: [_buildHouseholdTab(), _buildAccountTab()],
-          ),
+        body: Stack(
+          children: [
+            TabBarView(
+              children: [_buildHouseholdContent(), _buildAccountTab()],
+            ),
+            if (_busy) const LinearProgressIndicator(),
+          ],
         ),
         bottomNavigationBar: HouseheldBottomNav(
           currentIndex: 5,

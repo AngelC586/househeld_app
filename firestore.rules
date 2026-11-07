@@ -13,6 +13,32 @@ service cloud.firestore {
         );
     }
 
+    function isManager(householdID) {
+      return isMember(householdID)
+        && get(
+          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+        ).data.memberRole == 'manager';
+    }
+
+    function validAvatar(data) {
+      return (
+        !('avatarSymbol' in data)
+        || (
+          data.avatarSymbol is string
+          && data.avatarSymbol.size() > 0
+          && data.avatarSymbol.size() <= 32
+        )
+      )
+      && (
+        !('avatarColor' in data)
+        || (
+          data.avatarColor is int
+          && data.avatarColor >= 0
+          && data.avatarColor <= 4294967295
+        )
+      );
+    }
+
     // Check whether this transaction creates a household
     // owned by the signed-in user.
     function createsHousehold(householdID) {
@@ -55,11 +81,19 @@ service cloud.firestore {
 
     function validProfile(data) {
       return data.keys().hasOnly([
-          'username', 'email', 'displayName', 'householdID'
+          'username',
+          'email',
+          'displayName',
+          'householdID',
+          'avatarSymbol',
+          'avatarColor'
         ])
         && data.username is string
+        && data.username.size() <= 30
         && data.email is string
         && data.displayName is string
+        && data.displayName.size() <= 100
+        && validAvatar(data)
         && (
           data.get('householdID', null) == null
           || data.get('householdID', null) is string
@@ -86,7 +120,16 @@ service cloud.firestore {
     }
 
     match /users/{userID} {
-      allow read: if signedIn() && request.auth.uid == userID;
+      allow read: if signedIn()
+        && (
+          request.auth.uid == userID
+          || (
+            resource.data.get('householdID', null) is string
+            && isManager(
+              resource.data.get('householdID', '')
+            )
+          )
+        );
 
       // Signup creates a profile without household membership.
       allow create: if signedIn()
@@ -119,6 +162,22 @@ service cloud.firestore {
               || joinsHousehold(request.resource.data.householdID)
             )
           )
+        );
+
+      // Additional 'allow update' rule:
+      // Authorizes updates for leaving a household or removing a member
+      allow update: if signedIn()
+        && validProfile(request.resource.data)
+        && resource.data.get('householdID', null) is string
+        && request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['householdID'])
+        && request.resource.data.get('householdID', null) == null
+        && !existsAfter(
+          /databases/$(database)/documents/households/$(resource.data.householdID)/members/$(userID)
+        )
+        && (
+          request.auth.uid == userID
+          || isManager(resource.data.householdID)
         );
     }
 
@@ -217,14 +276,55 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly([
-          'householdName', 'creatorID'
+          'householdName',
+          'creatorID',
+          'managerCount'
         ])
         && request.resource.data.householdName is string
         && request.resource.data.householdName.size() > 0
+        && request.resource.data.householdName.size() <= 100
         && request.resource.data.creatorID == request.auth.uid
+        && request.resource.data.managerCount == 1
         && hasNoHousehold()
         && profileLinksTo(householdID)
         && hasManagerMembershipAfter(householdID);
+
+      allow update: if isManager(householdID)
+        && request.resource.data.keys().hasOnly([
+          'householdName',
+          'creatorID',
+          'managerCount'
+        ])
+        && request.resource.data.creatorID
+            == resource.data.creatorID
+        && request.resource.data.householdName is string
+        && request.resource.data.householdName.size() > 0
+        && request.resource.data.householdName.size() <= 100
+        && resource.data.managerCount is int
+        && request.resource.data.managerCount is int
+        && request.resource.data.managerCount >= 1
+        && (
+          (
+            request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'householdName'
+              ])
+          )
+          ||
+          (
+            request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'managerCount'
+              ])
+            && (
+              request.resource.data.managerCount
+                == resource.data.managerCount + 1
+              ||
+              request.resource.data.managerCount
+                == resource.data.managerCount - 1
+            )
+          )
+        );
 
       match /members/{memberID} {
         allow read: if isMember(householdID)
@@ -234,8 +334,14 @@ service cloud.firestore {
         allow create: if signedIn()
           && memberID == request.auth.uid
           && request.resource.data.keys().hasOnly([
-            'userID', 'householdID', 'memberRole', 'displayName'
+            'userID',
+            'householdID',
+            'memberRole',
+            'displayName',
+            'avatarSymbol',
+            'avatarColor'
           ])
+          && validAvatar(request.resource.data)
           && request.resource.data.userID == request.auth.uid
           && request.resource.data.householdID == householdID
           && request.resource.data.displayName is string
@@ -255,6 +361,126 @@ service cloud.firestore {
             )
           );
 
+        allow update: if isMember(householdID)
+          && request.resource.data.userID
+              == resource.data.userID
+          && request.resource.data.householdID
+              == resource.data.householdID
+          && request.resource.data.keys().hasOnly([
+            'userID',
+            'householdID',
+            'memberRole',
+            'displayName',
+            'avatarSymbol',
+            'avatarColor'
+          ])
+          && validAvatar(request.resource.data)
+          && (
+            (
+              // A user can update their own display name and avatar
+              request.auth.uid == memberID
+              && request.resource.data.diff(resource.data)
+                .affectedKeys().hasOnly([
+                  'displayName',
+                  'avatarSymbol',
+                  'avatarColor'
+                ])
+              && request.resource.data.get('displayName', '')
+                  == getAfter(
+                    /databases/$(database)/documents/users/$(memberID)
+                  ).data.displayName
+              && request.resource.data.get('avatarSymbol', null)
+                  == getAfter(
+                    /databases/$(database)/documents/users/$(memberID)
+                  ).data.get('avatarSymbol', null)
+              && request.resource.data.get('avatarColor', null)
+                  == getAfter(
+                    /databases/$(database)/documents/users/$(memberID)
+                  ).data.get('avatarColor', null)
+            )
+            ||
+            (
+              // Managers can change member roles, including their own,
+              // as long there's at least 1 other existing manager.
+              isManager(householdID)
+              && request.resource.data.diff(resource.data)
+                .affectedKeys().hasOnly([
+                  'memberRole'
+                ])
+              && request.resource.data.memberRole in [
+                'manager',
+                'member',
+                'child'
+              ]
+              && request.resource.data.memberRole
+                  != resource.data.memberRole
+              && getAfter(
+                /databases/$(database)/documents/households/$(householdID)
+              ).data.managerCount
+                  ==
+                  get(
+                    /databases/$(database)/documents/households/$(householdID)
+                  ).data.managerCount
+                  +
+                  (
+                    request.resource.data.memberRole == 'manager'
+                      ? 1
+                      : 0
+                  )
+                  -
+                  (
+                    resource.data.memberRole == 'manager'
+                      ? 1
+                      : 0
+                  )
+            )
+          );
+
+        allow delete: if isMember(householdID)
+          && (
+            // Managers may remove other household members:
+            isManager(householdID)
+            ||
+            // Ordinary Members may leave voluntarily:
+            (
+              request.auth.uid == memberID
+              && resource.data.memberRole == 'member'
+            )
+          )
+          && getAfter(
+            /databases/$(database)/documents/users/$(memberID)
+          ).data.get('householdID', null) == null
+          && (
+            (
+              // Removing a Manager requires decrementing the
+              // household's Manager count without reaching zero:
+              resource.data.memberRole == 'manager'
+              && getAfter(
+                /databases/$(database)/documents/households/$(householdID)
+              ).data.managerCount
+                ==
+                get(
+                  /databases/$(database)/documents/households/$(householdID)
+                ).data.managerCount - 1
+              && getAfter(
+                /databases/$(database)/documents/households/$(householdID)
+              ).data.managerCount >= 1
+            )
+            ||
+            (
+              // Removing a Member or Child leaves the
+              // Manager count unchanged:
+              resource.data.memberRole != 'manager'
+              && getAfter(
+                /databases/$(database)/documents/households/$(householdID)
+              ).data.managerCount
+                ==
+                get(
+                  /databases/$(database)/documents/households/$(householdID)
+                ).data.managerCount
+            )
+          );
+
         match /personalItemsLists/{listID} {
           // Other household members cannot read this private list.
           allow read: if signedIn()
@@ -271,6 +497,20 @@ service cloud.firestore {
               )
               && request.resource.data.keys().hasOnly([
                 'listName', 'listVisibility', 'ownerMemberID'
+              ])
+              && request.resource.data.listName == 'Personal Items'
+              && request.resource.data.listVisibility == 'private'
+              && request.resource.data.ownerMemberID == request.auth.uid;
+
+            // This update rule allows users to re-join a household:
+            allow update: if signedIn()
+              && memberID == request.auth.uid
+              && listID == 'default'
+              && joinsHousehold(householdID)
+              && request.resource.data.keys().hasOnly([
+                'listName',
+                'listVisibility',
+                'ownerMemberID'
               ])
               && request.resource.data.listName == 'Personal Items'
               && request.resource.data.listVisibility == 'private'

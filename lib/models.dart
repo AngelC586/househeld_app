@@ -7,12 +7,18 @@ class UserProfile {
   final String displayName;
   final String? householdID;
 
+  // Optional avatar customization variables:
+  final String? avatarSymbol;
+  final int? avatarColor;
+
   const UserProfile({
     required this.uid,
     required this.username,
     required this.email,
     required this.displayName,
     this.householdID,
+    this.avatarSymbol,
+    this.avatarColor,
   });
 
   factory UserProfile.fromMap(String uid, Map<String, dynamic> data) {
@@ -22,6 +28,8 @@ class UserProfile {
       email: data['email'] as String? ?? '',
       displayName: data['displayName'] as String? ?? '',
       householdID: data['householdID'] as String?,
+      avatarSymbol: data['avatarSymbol'] as String?,
+      avatarColor: data['avatarColor'] as int?,
     );
   }
 
@@ -30,6 +38,8 @@ class UserProfile {
     'email': email,
     'displayName': displayName,
     if (householdID != null) 'householdID': householdID,
+    if (avatarSymbol != null) 'avatarSymbol': avatarSymbol,
+    if (avatarColor != null) 'avatarColor': avatarColor,
   };
 }
 
@@ -37,11 +47,13 @@ class Household {
   final String householdID;
   final String householdName;
   final String creatorID;
+  final int? managerCount;
 
   const Household({
     required this.householdID,
     required this.householdName,
     required this.creatorID,
+    this.managerCount,
   });
 
   factory Household.fromMap(String householdID, Map<String, dynamic> data) {
@@ -49,12 +61,15 @@ class Household {
       householdID: householdID,
       householdName: data['householdName'] as String,
       creatorID: data['creatorID'] as String,
+      managerCount: data['managerCount'] as int?,
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {'householdName': householdName, 'creatorID': creatorID};
-  }
+  Map<String, dynamic> toMap() => {
+    'householdName': householdName,
+    'creatorID': creatorID,
+    if (managerCount != null) 'managerCount': managerCount,
+  };
 }
 
 class HouseholdMember {
@@ -63,12 +78,22 @@ class HouseholdMember {
   final String memberRole;
   final String displayName;
 
+  // Avatar customization:
+  final String? avatarSymbol;
+  final int? avatarColor;
+
   const HouseholdMember({
     required this.userID,
     required this.householdID,
     required this.memberRole,
     this.displayName = '',
+    this.avatarSymbol,
+    this.avatarColor,
   });
+
+  bool get isManager => memberRole == 'manager';
+  bool get isMember => memberRole == 'member';
+  bool get isChild => memberRole == 'child';
 
   factory HouseholdMember.fromMap(Map<String, dynamic> data) {
     return HouseholdMember(
@@ -76,6 +101,8 @@ class HouseholdMember {
       householdID: data['householdID'] as String? ?? '',
       memberRole: data['memberRole'] as String? ?? 'member',
       displayName: data['displayName'] as String? ?? '',
+      avatarSymbol: data['avatarSymbol'] as String?,
+      avatarColor: data['avatarColor'] as int?,
     );
   }
 
@@ -84,6 +111,8 @@ class HouseholdMember {
     'householdID': householdID,
     'memberRole': memberRole,
     'displayName': displayName,
+    if (avatarSymbol != null) 'avatarSymbol': avatarSymbol,
+    if (avatarColor != null) 'avatarColor': avatarColor,
   };
 }
 
