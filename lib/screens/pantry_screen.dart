@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models.dart';
 import '../services/pantry_service.dart';
@@ -9,6 +10,7 @@ import '../widgets/househeld_bottom_nav.dart';
 import '../widgets/pantry_row_card.dart';
 import '../navigation/househeld_navigation.dart';
 import 'pantry_form_screen.dart';
+import 'dart:async';
 
 // Sorting options:
 enum _PantrySortField { name, type, quantity }
@@ -34,6 +36,48 @@ class _PantryScreenState extends State<PantryScreen> {
   _SortDirection _sortDirection = _SortDirection.asc;
 
   bool _busy = false;
+
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _membershipSubscription;
+  
+  bool _canEditPantry = false;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    _membershipSubscription = FirebaseFirestore.instance
+        .collection('households')
+        .doc(widget.householdID)
+        .collection('members')
+        .doc(user.uid)
+        .snapshots()
+        .listen((snapshot) {
+          if (!mounted) return;
+
+          final role = snapshot.data()?['memberRole'];
+
+          setState(() {
+            _canEditPantry = role == 'manager' || role == 'member';
+          }); 
+        },
+        onError: (Object error) {
+          if (!mounted) return;
+
+          setState(() {
+            _canEditPantry = false;
+          });
+        },
+        );
+  }
+
+  @override
+  void dispose() {
+    _membershipSubscription?.cancel();
+    super.dispose();
+  }
 
   // Put pantry items in a list to sort them:
   List<PantryItem> _sorted(List<PantryItem> items) {
@@ -80,7 +124,7 @@ class _PantryScreenState extends State<PantryScreen> {
 
   // Action failure handling:
   Future<bool> _runAction(Future<void> Function() action) async {
-    if (_busy) return false;
+    if (!mounted || _busy || !_canEditPantry) return false;
 
     setState(() => _busy = true);
 
@@ -454,8 +498,8 @@ class _PantryScreenState extends State<PantryScreen> {
         ...sorted.map(
           (item) => PantryRowCard(
             item: item,
-            onQuantityTap: () => _showQuantityDialog(item),
-            onMenu: () => _showItemMenu(item),
+            onQuantityTap: _canEditPantry && !_busy ? () => _showQuantityDialog(item) : null,
+            onMenu: _canEditPantry && !_busy ? () => _showItemMenu(item) : null,
           ),
         ),
       ],
@@ -568,11 +612,11 @@ class _PantryScreenState extends State<PantryScreen> {
               ],
             ),
 
-            floatingActionButton: FloatingActionButton(
+            floatingActionButton: _canEditPantry ? FloatingActionButton(
               backgroundColor: AppColors.clay,
               onPressed: _busy ? null : _openCreateItem,
               child: const Icon(Icons.add, color: Colors.white),
-            ),
+            ) : null,
 
             bottomNavigationBar: HouseheldBottomNav(
               currentIndex: 2,
