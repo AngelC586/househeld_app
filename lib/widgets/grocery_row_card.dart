@@ -18,7 +18,7 @@ class GroceryRowCard extends StatelessWidget {
   final int itemCount;
   final VoidCallback onViewItems;
   final VoidCallback? onShop;
-  final VoidCallback onMenu;
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -47,11 +47,12 @@ class GroceryRowCard extends StatelessWidget {
                     style: AppText.heading.copyWith(fontSize: 18),
                   ),
                 ),
-                IconButton(
-                  onPressed: onMenu,
-                  tooltip: 'Grocery List options',
-                  icon: const Icon(Icons.more_vert),
-                ),
+                if (onMenu != null) 
+                  IconButton(
+                    onPressed: onMenu,
+                    tooltip: 'Grocery List options',
+                    icon: const Icon(Icons.more_vert),
+                  ),
               ],
             ),
             if (list.groceryListDescription.trim().isNotEmpty) ...[
@@ -81,7 +82,7 @@ class GroceryRowCard extends StatelessWidget {
                     child: const Text('View Items'),
                   ),
                 ),
-                if (!list.isComplete) ...[
+                if (!list.isComplete && onShop != null) ...[
                   const SizedBox(width: 10),
                   Expanded(
                     child: FilledButton(

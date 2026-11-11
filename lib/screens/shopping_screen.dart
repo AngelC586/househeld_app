@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models.dart';
 import '../services/grocery_service.dart';
 import '../theme/app_theme.dart';
+
+import 'dart:async';
 
 enum ShoppingItemSort { name, type, quantity }
 
@@ -27,6 +31,25 @@ class ShoppingScreen extends StatefulWidget {
 class _ShoppingScreenState extends State<ShoppingScreen> {
   final GroceryService _groceryService = GroceryService();
 
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _membershipSubscription;
+  StreamSubscription<GroceryList?>? _listSubscription;
+
+  String? _memberRole;
+  GroceryList? _list;
+
+  String get _currentUserID => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  bool get _canShop {
+    final list = _list;
+    return list != null &&
+        !list.isComplete &&
+        list.canEditItems(
+          memberID: _currentUserID,
+          memberRole: _memberRole ?? '',
+        );
+  }
+
   late final Stream<List<GroceryItem>> _itemsStream;
 
   final Set<String> _checkedIDs = <String>{};
@@ -45,6 +68,57 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       householdID: widget.householdID,
       groceryListID: widget.groceryListID,
     );
+
+    final userID = _currentUserID;
+    if (userID.isEmpty) return;
+
+    _membershipSubscription = FirebaseFirestore.instance
+        .collection('households')
+        .doc(widget.householdID)
+        .collection('members')
+        .doc(userID)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (!mounted) return;
+            setState(() {
+              _memberRole = snapshot.data()?['memberRole'] as String?;
+            });
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+            setState(() {
+              _memberRole = null;
+            });
+          },
+        );
+
+    _listSubscription = _groceryService
+        .watchList(
+          householdID: widget.householdID,
+          groceryListID: widget.groceryListID,
+        )
+        .listen(
+          (list) {
+            if (!mounted) return;
+            setState(() {
+              _list = list;
+            });
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+            setState(() {
+              _list = null;
+            });
+          },
+        );
+  }
+
+  @override
+  void dispose() {
+    _membershipSubscription?.cancel();
+    _listSubscription?.cancel();
+    super.dispose();
   }
 
   String _errorMessage(Object error) {
@@ -179,6 +253,11 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   Future<void> _endShopping(List<GroceryItem> items) async {
     if (_isSaving || _isLeaving) return;
 
+    if (!_canShop) {
+      _closeScreen();
+      return;
+    }
+
     final selectedIDs = _newlyCheckedIDs(items);
 
     final uncheckedItems =
@@ -210,6 +289,16 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     }
 
     if (choice != 'save' || selectedIDs.isEmpty) {
+      return;
+    }
+
+    if (!_canShop) {
+      _showError(
+        StateError(
+          'shopping is no longer available for this list. '
+          'Your selections were not saved.',
+        ),
+      );
       return;
     }
 
@@ -256,10 +345,10 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       ),
       child: CheckboxListTile(
         value: isChecked,
-        enabled: !item.isPurchased && !_isSaving,
+        enabled: _canShop && !item.isPurchased && !_isSaving,
         activeColor: AppColors.forest,
         controlAffinity: ListTileControlAffinity.leading,
-        onChanged: item.isPurchased || _isSaving
+        onChanged: !_canShop || item.isPurchased || _isSaving
             ? null
             : (checked) {
                 setState(() {
@@ -399,12 +488,20 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton.icon(
-                  onPressed: _isSaving || !snapshot.hasData
+                  onPressed: _isSaving
+                      ? null
+                      : !_canShop
+                      ? _closeScreen
+                      : !snapshot.hasData || snapshot.hasError
                       ? null
                       : () => _endShopping(items),
                   icon: const Icon(Icons.check_circle_outline),
                   label: Text(
-                    _isSaving ? 'Saving Purchases...' : 'End Shopping Trip',
+                    _isSaving
+                        ? 'Saving Purchases...'
+                        : !_canShop
+                        ? 'Leave Shopping Trip'
+                        : 'End Shopping Trip',
                   ),
                 ),
               ),

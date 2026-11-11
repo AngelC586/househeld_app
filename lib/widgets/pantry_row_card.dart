@@ -12,8 +12,8 @@ class PantryRowCard extends StatelessWidget {
   });
 
   final PantryItem item;
-  final VoidCallback onQuantityTap;
-  final VoidCallback onMenu;
+  final VoidCallback? onQuantityTap;
+  final VoidCallback? onMenu;
 
   // UI for Pantry Item entries on the Pantry Screen:
   @override
@@ -93,11 +93,12 @@ class PantryRowCard extends StatelessWidget {
               ),
             ),
 
-            IconButton(
-              icon: const Icon(Icons.more_vert, color: AppColors.inkSoft),
-              tooltip: 'Pantry item options',
-              onPressed: onMenu,
-            ),
+            if (onMenu != null)
+              IconButton(
+                icon: const Icon(Icons.more_vert, color: AppColors.inkSoft),
+                tooltip: 'Pantry item options',
+                onPressed: onMenu,
+              ),
           ],
         ),
       ),

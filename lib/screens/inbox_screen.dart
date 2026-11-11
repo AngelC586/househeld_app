@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/inbox_message_card.dart';
-
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -12,11 +12,11 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  final String _currentUserID = '';
+  // Uncomment this for database integration:
+  // final String _currentUserID = '';
 
   final List<InboxMessage> _messages = [];
 
-  
   final Map<String, String> _memberNames = const {};
 
   String _nameFor(String uid) => _memberNames[uid] ?? uid;
@@ -40,8 +40,14 @@ class _InboxScreenState extends State<InboxScreen> {
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes'),
+          ),
         ],
       ),
     );
@@ -60,7 +66,10 @@ class _InboxScreenState extends State<InboxScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.mark_email_read_outlined, color: AppColors.forest),
+              leading: const Icon(
+                Icons.mark_email_read_outlined,
+                color: AppColors.forest,
+              ),
               title: Text(message.isRead ? 'Mark as Unread' : 'Mark as Read'),
               onTap: () {
                 Navigator.pop(context);
@@ -77,7 +86,11 @@ class _InboxScreenState extends State<InboxScreen> {
                   'Are you sure you want to delete this message?',
                 );
                 if (confirmed) {
-                  setState(() => _messages.removeWhere((m) => m.messageId == message.messageId));
+                  setState(
+                    () => _messages.removeWhere(
+                      (m) => m.messageId == message.messageId,
+                    ),
+                  );
                 }
               },
             ),
@@ -151,7 +164,9 @@ class _InboxScreenState extends State<InboxScreen> {
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sending messages is not wired up yet.')),
+                  const SnackBar(
+                    content: Text('Sending messages is not wired up yet.'),
+                  ),
                 );
               },
               child: const Text('Send'),
@@ -201,7 +216,10 @@ class _InboxScreenState extends State<InboxScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: AppColors.forestDeep),
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: AppColors.forestDeep,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                     Expanded(
@@ -211,7 +229,10 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined, color: AppColors.forestDeep),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: AppColors.forestDeep,
+                      ),
                       tooltip: 'Send Message',
                       onPressed: _showSendMessageDialog,
                     ),

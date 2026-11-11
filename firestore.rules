@@ -721,6 +721,11 @@ service cloud.firestore {
       
       match /groceryLists/{groceryListID} {
 
+        function canManageSharedGroceryList() {
+          return isMember(householdID)
+            && get(/databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)).data.memberRole in ['manager', 'member'];
+        }
+
         function groceryListPath() {
           return /databases/$(database)/documents/households/$(householdID)/groceryLists/$(groceryListID);
         }
@@ -814,6 +819,25 @@ service cloud.firestore {
             && canViewGroceryList(get(groceryListPath()).data);
         }
 
+        function canEditGroceryItems(data) {
+          let role = get(/databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)).data.memberRole;
+
+          return canViewGroceryList(data)
+            && (role in ['manager', 'member'] || (
+              role == 'child'
+              && groceryListID == 'personal_' + request.auth.uid
+              && data.groceryListVisibility == 'restricted'
+              && data.ownerMemberID == request.auth.uid
+              && data.visibleMemberIDs == []
+            ));
+        }
+
+        function canEditParentListItems() {
+          return signedIn()
+          && exists(groceryListPath())
+          && canEditGroceryItems(get(groceryListPath()).data);
+        }
+
         function canCreateItemInNewList() {
           return !exists(groceryListPath())
             && existsAfter(groceryListPath())
@@ -823,6 +847,50 @@ service cloud.firestore {
             )
             && getAfter(groceryListPath()).data.ownerMemberID
                 == request.auth.uid;
+        }
+
+        // Reserve personal_IDs for the owner's automatic private list
+        function validPersonalGroceryList(data) {
+          return !groceryListID.matches('personal_.*')
+          || (
+            groceryListID == 'personal_' + request.auth.uid
+            && data.ownerMemberID == request.auth.uid
+            && data.groceryListVisibility == 'restricted'
+            && data.visibleMemberIDs == []
+          );
+        }
+
+        function canCreateCustomGroceryList(data) {
+          return canManageSharedGroceryList() 
+          || (isMember(householdID) && get(
+            /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+          ).data.memberRole == 'child'
+          && groceryListID == 'personal_' + request.auth.uid
+          && data.ownerMemberID == request.auth.uid
+          && data.groceryListVisibility == 'restricted'
+          && data.visibleMemberIDs == []
+          && data.groceryListStatus == 'incomplete'
+          && data.groceryItemsRevision == 0
+          );
+        }
+
+        function canUpdateGroceryList(data) {
+          return canManageSharedGroceryList() 
+          || ( isMember(householdID) && get(
+            /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+          ).data.memberRole == 'child'
+          && groceryListID == 'personal_' + request.auth.uid
+          && data.ownerMemberID == request.auth.uid
+          && data.groceryListVisibility == 'restricted'
+          && data.visibleMemberIDs == []
+          && request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'groceryListName',
+            'groceryListDescription',
+            'groceryListStatus',
+            'groceryItemsRevision'
+          ])
+          );
         }
 
         function isGroceryListOwner() {
@@ -845,8 +913,15 @@ service cloud.firestore {
           ];
 
           return data.keys().hasAll(originalFields)
-            && data.keys().hasOnly(
-              originalFields + ['groceryItemPurchasedQuantity']
+            && data.keys().hasOnly([
+              'groceryItemName',
+              'groceryItemType',
+              'groceryItemQuantity',
+              'groceryItemStatus',
+              'groceryItemDescription',
+              'sourceFoodItemID',
+              'sourceHouseholdItemID',
+              'groceryItemPurchasedQuantity']
             )
             && data.groceryItemName is string
             && data.groceryItemName.size() > 0
@@ -894,6 +969,10 @@ service cloud.firestore {
         // The default list belongs to the household
         allow get, list: if canViewGroceryList(resource.data);
 
+        // Also let members check whether their automatic private list exists
+        allow get: if (isMember(householdID) && groceryListID == 'personal_' + request.auth.uid && !exists(groceryListPath())) ||
+                  canViewGroceryList(resource.data);
+
         allow create: if (
           groceryListID == 'default'
           && createsHousehold(householdID)
@@ -903,6 +982,7 @@ service cloud.firestore {
         ) || (
           groceryListID != 'default'
           && isMember(householdID)
+          && canCreateCustomGroceryList(request.resource.data)
           && validCustomGroceryList(request.resource.data)
           && request.resource.data.ownerMemberID == request.auth.uid
           && request.resource.data.groceryListStatus in [
@@ -916,13 +996,16 @@ service cloud.firestore {
         );
 
         allow update: if canViewGroceryList(resource.data)
+          && validPersonalGroceryList(request.resource.data)
+          && canUpdateGroceryList(resource.data)
           && validGroceryRevisionUpdate()
           && (
             (
               // Default Grocery List:
               // Household members can update its permitted fields
               groceryListID == 'default'
-              && isMember(householdID)
+              && canManageSharedGroceryList()
+              && validDefaultGroceryList(request.resource.data)
               && request.resource.data.diff(resource.data)
                   .affectedKeys().hasOnly([
                     'groceryListName',
@@ -947,6 +1030,7 @@ service cloud.firestore {
               // Custom Grocery Lists:
               groceryListID != 'default'
               && validCustomGroceryList(request.resource.data)
+              && validPersonalGroceryList(request.resource.data)
               && request.resource.data.ownerMemberID
                   == resource.data.ownerMemberID
               && (
@@ -961,7 +1045,7 @@ service cloud.firestore {
           );
 
         allow delete: if groceryListID != 'default'
-          && isMember(householdID)
+          && canManageSharedGroceryList()
           && isGroceryListOwner();
 
         allow get, list, delete: if isDeletingManager();
@@ -969,14 +1053,18 @@ service cloud.firestore {
         match /items/{groceryItemID} {
           allow read: if canViewParentList();
 
-          allow create: if (
-            canViewParentList()
-            || canCreateItemInNewList()
-          );
+          allow create: if (canEditParentListItems() || (
+            canCreateItemInNewList()
+            && canEditGroceryItems(getAfter(groceryListPath()).data)
+            )
+          ) && validGroceryItem(request.resource.data);
 
-          allow update: if canViewParentList();
+          allow update: if canEditParentListItems() && validGroceryItem(request.resource.data);
 
-          allow delete: if canViewParentList();
+          allow delete: if groceryListID != 'default'
+          && !groceryListID.matches('personal_.*')
+          && canManageSharedGroceryList()
+          && isGroceryListOwner();
 
           allow get, list, delete: if isDeletingManager();
         }
@@ -1140,9 +1228,15 @@ service cloud.firestore {
       }
 
       match /pantryItems/{foodItemID} {
+        function canEditPantry() {
+          return isMember(householdID)
+          && get(/databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)).data.memberRole in ['manager', 'member'];
+        }
+        
+
         allow read: if isMember(householdID);
 
-        allow create: if isMember(householdID)
+        allow create: if canEditPantry()
           && request.resource.data.keys().hasAll([
             'foodName',
             'foodType',
@@ -1175,7 +1269,7 @@ service cloud.firestore {
             )
           );
 
-        allow update: if isMember(householdID)
+        allow update: if canEditPantry()
           && request.resource.data.keys().hasOnly([
             'foodName',
             'foodType',
@@ -1201,7 +1295,7 @@ service cloud.firestore {
             )
           );
 
-        allow delete: if isMember(householdID);
+        allow delete: if canEditPantry();
       }
     }
   }

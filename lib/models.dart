@@ -422,6 +422,24 @@ class GroceryList {
         visibleMemberIDs.contains(memberID);
   }
 
+  // Use with the signed-in users verified household membership
+  bool canEditItems({
+    required String memberID,
+    required String memberRole,
+  }) {
+    if (!canView(memberID)) return false;
+
+    if (memberRole == 'manager' || memberRole == 'member') {
+      return true;
+    }
+
+    return memberRole == 'child' && 
+      groceryListID == 'personal_$memberID' &&
+      ownerMemberID == memberID && 
+      groceryListVisibility == 'restricted' && 
+      visibleMemberIDs.isEmpty;
+  }
+
   factory GroceryList.fromMap(String id, Map<String, dynamic> data) {
     return GroceryList(
       groceryListID: id,
