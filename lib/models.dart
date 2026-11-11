@@ -523,3 +523,42 @@ class ActivityEntry {
     this.isRestock = false,
   });
 }
+
+class InboxMessage {
+  final String messageId;
+  final String subject;
+  final String body;
+  final String sentByMemberID;
+  final List<String> sentToMemberIDs; // up to 8
+  final DateTime sentAt;
+  final bool isRead;
+ 
+  const InboxMessage({
+    required this.messageId,
+    required this.subject,
+    required this.body,
+    required this.sentByMemberID,
+    required this.sentToMemberIDs,
+    required this.sentAt,
+    this.isRead = false,
+  });
+ 
+  String get bodyPreview {
+    final trimmed = body.trim();
+    if (trimmed.length <= 50) return trimmed;
+    return '${trimmed.substring(0, 50)}…';
+  }
+ 
+  InboxMessage copyWith({bool? isRead}) {
+    return InboxMessage(
+      messageId: messageId,
+      subject: subject,
+      body: body,
+      sentByMemberID: sentByMemberID,
+      sentToMemberIDs: sentToMemberIDs,
+      sentAt: sentAt,
+      isRead: isRead ?? this.isRead,
+    );
+  }
+}
+
