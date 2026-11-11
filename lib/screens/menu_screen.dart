@@ -359,6 +359,25 @@ class _MenuScreenState extends State<MenuScreen> {
       return;
     }
 
+    // Additional error handling because sometimes it showed the wrong one:
+    if (member.memberRole == 'manager' && newRole != 'manager') {
+      try {
+        final household = await _householdService.getHousehold(
+          widget.householdID,
+        );
+
+        if (!mounted) return;
+
+        if (household?.managerCount == 1) {
+          _message(
+            'A household must have at least one Manager! '
+            'Please assign another Manager first.',
+          );
+          return;
+        }
+      } catch (_) {}
+    }
+
     final confirmed = await _confirm(
       title: 'Confirm Role Change',
       message:
@@ -455,7 +474,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
     if (!mounted || !confirmed) return;
 
-    final controller = TextEditingController();
+    String confirmationText = '';
 
     final typedConfirmation = await showDialog<bool>(
       context: context,
@@ -480,14 +499,15 @@ class _MenuScreenState extends State<MenuScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: controller,
                     autofocus: true,
                     decoration: const InputDecoration(
                       labelText: 'Household Name',
                       border: OutlineInputBorder(),
                     ),
-                    onChanged: (_) {
-                      setDialogState(() {});
+                    onChanged: (value) {
+                      setDialogState(() {
+                        confirmationText = value;
+                      });
                     },
                   ),
                 ],
@@ -503,7 +523,7 @@ class _MenuScreenState extends State<MenuScreen> {
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.clay,
                   ),
-                  onPressed: controller.text.trim() == household.householdName
+                  onPressed: confirmationText.trim() == household.householdName
                       ? () => Navigator.pop(dialogContext, true)
                       : null,
                   child: const Text('Delete Permanently'),
@@ -514,8 +534,6 @@ class _MenuScreenState extends State<MenuScreen> {
         );
       },
     );
-
-    controller.dispose();
 
     if (!mounted || typedConfirmation != true) return;
 

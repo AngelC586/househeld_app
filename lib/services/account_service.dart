@@ -288,11 +288,52 @@ class AccountService {
     await _auth.signOut();
   }
 
+  // Helper for deleting private Stuff List and items for deleted users:
+  Future<void> _deletePrivateStuffForAccount({
+    required String householdID,
+    required String uid,
+  }) async {
+    final memberRef = _db
+        .collection('households')
+        .doc(householdID)
+        .collection('members')
+        .doc(uid);
+
+    final personalListsRef = memberRef.collection('personalItemsLists');
+
+    final defaultListRef = personalListsRef.doc('default');
+
+    final itemsRef = defaultListRef.collection('items');
+
+    while (true) {
+      final snapshot = await itemsRef.limit(100).get();
+
+      if (snapshot.docs.isEmpty) {
+        break;
+      }
+
+      final batch = _db.batch();
+
+      for (final document in snapshot.docs) {
+        batch.delete(document.reference);
+      }
+
+      await batch.commit();
+    }
+
+    final listSnapshot = await defaultListRef.get();
+
+    if (listSnapshot.exists) {
+      await defaultListRef.delete();
+    }
+  }
+
   // Method to delete your account:
   Future<void> deleteAccount({required String currentPassword}) async {
     final user = _requireUser();
     final uid = user.uid;
 
+    // Reauthenticate before anything bad happens:
     await reauthenticateWithPassword(currentPassword);
 
     final profileRef = _db.collection('users').doc(uid);
@@ -300,7 +341,7 @@ class AccountService {
     final originalProfile = profileSnapshot.data();
 
     if (originalProfile == null) {
-      throw StateError('Your account was not found...');
+      throw StateError('Your account profile was not found.');
     }
 
     final householdID = originalProfile['householdID'] as String?;
@@ -310,9 +351,41 @@ class AccountService {
 
     if (householdID != null && householdID.isNotEmpty) {
       householdRef = _db.collection('households').doc(householdID);
+
       memberRef = householdRef.collection('members').doc(uid);
     }
 
+    // Verify account deletion is allowed:
+    if (householdRef != null && memberRef != null) {
+      final householdSnapshot = await householdRef.get();
+      final memberSnapshot = await memberRef.get();
+
+      final householdData = householdSnapshot.data();
+      final memberData = memberSnapshot.data();
+
+      if (householdData == null || memberData == null) {
+        throw StateError('Your household membership could not be verified.');
+      }
+
+      final role = memberData['memberRole'];
+
+      if (role == 'manager') {
+        final managerCount = householdData['managerCount'];
+
+        if (managerCount is! int || managerCount <= 1) {
+          throw StateError(
+            'You are the last remaining Manager. '
+            'Please assign another Manager before '
+            'deleting your account.',
+          );
+        }
+      }
+
+      // Delete the user's private Stuff List and items:
+      await _deletePrivateStuffForAccount(householdID: householdID!, uid: uid);
+    }
+
+    // Delete Firestore account information:
     await _db.runTransaction((transaction) async {
       final currentProfile = await transaction.get(profileRef);
 
@@ -323,52 +396,61 @@ class AccountService {
       if (memberRef != null && householdRef != null) {
         final currentHouseholdRef = householdRef;
         final currentMemberRef = memberRef;
+
         final formerMemberRef = currentHouseholdRef
             .collection('formerMembers')
             .doc(uid);
 
         final householdSnapshot = await transaction.get(currentHouseholdRef);
+
         final memberSnapshot = await transaction.get(currentMemberRef);
 
         final memberData = memberSnapshot.data();
         final householdData = householdSnapshot.data();
 
         if (householdData == null || memberData == null) {
-          throw StateError(
-            'Your household membership could not be verified...',
-          );
+          throw StateError('Your household membership could not be verified.');
         }
 
         final role = memberData['memberRole'];
 
         if (role == 'manager') {
-          final count = householdData['managerCount'];
+          final managerCount = householdData['managerCount'];
 
-          if (count is! int || count <= 1) {
+          if (managerCount is! int || managerCount <= 1) {
             throw StateError(
               'You are the last remaining Manager. '
               'Please assign another Manager before '
-              'attempting to delete your account!',
+              'deleting your account.',
             );
           }
 
-          transaction.update(currentHouseholdRef, {'managerCount': count - 1});
+          // Update manager count if a Manager is deleting their account:
+          transaction.update(currentHouseholdRef, {
+            'managerCount': managerCount - 1,
+          });
         }
 
+        // Remove household membership:
         transaction.delete(currentMemberRef);
+
+        // Preserve the user's departure record for household deletion:
         transaction.set(formerMemberRef, {
           'userID': uid,
           'departedAt': FieldValue.serverTimestamp(),
         });
       }
 
+      // Delete the user's Firestore profile (database data):
       transaction.delete(profileRef);
     });
 
+    // Delete Firebase Auth account:
     try {
       await user.delete();
     } catch (error) {
-      // Restore a profile so the authenticated user can access onboarding:
+      // If account deletion fails, a user's profile is restored without
+      // a household link, allowing the user to access onboarding.
       final restoredProfile = Map<String, dynamic>.from(originalProfile)
         ..remove('householdID');
 
@@ -376,16 +458,17 @@ class AccountService {
         await profileRef.set(restoredProfile);
       } catch (_) {
         throw StateError(
-          'Account deletion did not finish and '
-          'profile recovery also failed. '
+          'Account deletion did not finish, and profile recovery also failed. '
           'Original error: $error',
         );
       }
 
       throw StateError(
-        'Your account was not deleted, but your household '
-        'membership was removed. You can sign in and join '
-        'a household again. Error: $error',
+        'Your account was not deleted successfully. '
+        'If you still want to delete your account, '
+        'please sign in, join or create a household, '
+        'and use the Account Menu to try again.'
+        'Error: $error',
       );
     }
   }

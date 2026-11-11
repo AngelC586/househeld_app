@@ -625,9 +625,6 @@ service cloud.firestore {
           && !existsAfter(
             /databases/$(database)/documents/households/$(householdID)
           )
-          && existsAfter(
-            /databases/$(database)/documents/households/$(householdID)/formerMembers/$(memberID)
-          )
           && getAfter(
             /databases/$(database)/documents/users/$(memberID)
           ).data.get('householdID', null) == null;
@@ -701,6 +698,11 @@ service cloud.firestore {
               && request.resource.data.ownerMemberID == request.auth.uid;
 
             allow list, delete: if isDeletingManager();
+
+            allow delete: if signedIn()
+              && memberID == request.auth.uid
+              && listID == 'default'
+              && isMember(householdID);
           }
         }
 
@@ -1061,10 +1063,7 @@ service cloud.firestore {
 
           allow update: if canEditParentListItems() && validGroceryItem(request.resource.data);
 
-          allow delete: if groceryListID != 'default'
-          && !groceryListID.matches('personal_.*')
-          && canManageSharedGroceryList()
-          && isGroceryListOwner();
+          allow delete: if canEditParentListItems();
 
           allow get, list, delete: if isDeletingManager();
         }

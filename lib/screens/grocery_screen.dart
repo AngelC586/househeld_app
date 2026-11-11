@@ -56,6 +56,19 @@ class _GroceryScreenState extends State<GroceryScreen> {
 
   final Map<String, int> _itemCounts = {};
 
+  final Map<String, Stream<List<GroceryItem>>> _itemStreams = {};
+
+  // Keeps Grocery List item stream stable, for sorting:
+  Stream<List<GroceryItem>> _itemsStreamFor(String groceryListID) {
+    return _itemStreams.putIfAbsent(
+      groceryListID,
+      () => _service.watchItems(
+        householdID: widget.householdID,
+        groceryListID: groceryListID,
+      ),
+    );
+  }
+
   String? _resetPromptedRevisionKey;
 
   @override
@@ -280,7 +293,8 @@ class _GroceryScreenState extends State<GroceryScreen> {
                   }
                 },
               ),
-            ] else if (_canCreateLists && list.ownerMemberID == _currentUserID)...[
+            ] else if (_canCreateLists &&
+                list.ownerMemberID == _currentUserID) ...[
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('Edit'),
@@ -398,26 +412,33 @@ class _GroceryScreenState extends State<GroceryScreen> {
             const SizedBox(height: 8),
           ],
           StreamBuilder<List<GroceryItem>>(
-            stream: _service.watchItems(
-              householdID: widget.householdID,
-              groceryListID: list.groceryListID,
-            ),
+            key: ValueKey('grocery-items-${list.groceryListID}'),
+            stream: _itemsStreamFor(list.groceryListID),
             builder: (context, snapshot) {
-              final count = snapshot.data?.length ?? 0;
+              final count =
+                  snapshot.data?.length ?? _itemCounts[list.groceryListID] ?? 0;
+
               if (snapshot.hasData &&
                   _itemCounts[list.groceryListID] != count) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _itemCounts[list.groceryListID] != count) {
-                    setState(() => _itemCounts[list.groceryListID] = count);
+                  if (!mounted) return;
+
+                  if (_itemCounts[list.groceryListID] != count) {
+                    setState(() {
+                      _itemCounts[list.groceryListID] = count;
+                    });
                   }
                 });
               }
+
               return GroceryRowCard(
                 list: list,
                 itemCount: count,
+
                 onMenu: _canEditListItems(list)
                     ? () => _showOptions(list)
                     : null,
+
                 onViewItems: () {
                   Navigator.push<void>(
                     context,
@@ -429,6 +450,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
                     ),
                   );
                 },
+
                 onShop: !_canEditListItems(list)
                     ? null
                     : () async {
@@ -436,7 +458,8 @@ class _GroceryScreenState extends State<GroceryScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'Add some items or reopen the list before shopping!',
+                                'Add some items or reopen '
+                                'the list before shopping!',
                               ),
                             ),
                           );
@@ -571,21 +594,45 @@ class _GroceryScreenState extends State<GroceryScreen> {
 
   // Sorting logic:
   Widget _sortedListView(List<GroceryList> lists, String emptyText) {
-    final sorted = [...lists];
+    final sorted = List<GroceryList>.from(lists);
+
     sorted.sort((a, b) {
-      if (a.isDefault != b.isDefault) return a.isDefault ? -1 : 1;
-      final compare = _sort == _ListSort.name
-          ? a.groceryListName.toLowerCase().compareTo(
-              b.groceryListName.toLowerCase(),
-            )
-          : (_itemCounts[a.groceryListID] ?? 0).compareTo(
-              _itemCounts[b.groceryListID] ?? 0,
-            );
-      if (compare != 0) return _ascending ? compare : -compare;
-      return a.groceryListName.toLowerCase().compareTo(
+      // Keep the household default Grocery List first:
+      if (a.isDefault != b.isDefault) {
+        return a.isDefault ? -1 : 1;
+      }
+
+      int comparison;
+
+      if (_sort == _ListSort.name) {
+        comparison = a.groceryListName.toLowerCase().compareTo(
+          b.groceryListName.toLowerCase(),
+        );
+      } else {
+        final countA = _itemCounts[a.groceryListID] ?? 0;
+        final countB = _itemCounts[b.groceryListID] ?? 0;
+
+        comparison = countA.compareTo(countB);
+      }
+
+      // Apply ascending or descending direction:
+      if (comparison != 0) {
+        return _ascending ? comparison : -comparison;
+      }
+
+      // If item counts match, sort by name:
+      comparison = a.groceryListName.toLowerCase().compareTo(
         b.groceryListName.toLowerCase(),
       );
+
+      if (comparison != 0) {
+        return comparison;
+      }
+
+      // Tie-breaker if name and item counts both match:
+      return a.groceryListID.compareTo(b.groceryListID);
     });
+
     return _listCards(sorted, emptyText: emptyText);
   }
 }
