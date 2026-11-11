@@ -18,11 +18,14 @@ class AvatarChip extends StatelessWidget {
   });
 
   String get _initial {
+    final custom = member.avatarSymbol?.trim();
+
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+
     final name = member.displayName.trim();
-
-    if (name.isEmpty) return '?';
-
-    return name[0].toUpperCase();
+    return name.isEmpty ? '?' : name[0].toUpperCase();
   }
 
   String get _roleLabel {
@@ -39,7 +42,9 @@ class AvatarChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _avatarColors[colorSeed % _avatarColors.length];
+    final color = member.avatarColor == null
+        ? _avatarColors[colorSeed % _avatarColors.length]
+        : Color(member.avatarColor!);
     final avatar = CircleAvatar(
       radius: 14,
       backgroundColor: color,

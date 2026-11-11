@@ -8,6 +8,7 @@ import '../services/household_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import '../widgets/member_card.dart';
+import '../widgets/account_dialogs.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key, required this.householdID});
@@ -39,6 +40,10 @@ class _MenuScreenState extends State<MenuScreen> {
     _membersStream = _householdService.watchMembers(widget.householdID);
 
     _profileStream = _accountService.watchCurrentProfile();
+
+    _accountService.syncVerifiedEmail().catchError((Object error) {
+      debugPrint('Email synchronization failed: $error');
+    });
   }
 
   // Method to handle navigation:
@@ -431,6 +436,104 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
+  // Method for the deleting household dialog:
+  Future<void> _deleteHousehold(Household household) async {
+    if (_busy) return;
+
+    final confirmed = await _confirm(
+      title: 'Delete Household?',
+      message:
+          'This will permanently delete "${household.householdName}" '
+          'and its household data, including Grocery Lists, '
+          'Pantry Items, Stuff, Tasks, and member records.\n\n'
+          'All members will lose access to the household, '
+          'but their accounts will not be deleted.\n\n'
+          'This action cannot be undone!',
+      confirmLabel: 'Continue',
+      destructive: true,
+    );
+
+    if (!mounted || !confirmed) return;
+
+    final controller = TextEditingController();
+
+    final typedConfirmation = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Final Confirmation'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Type the exact household name '
+                    'to confirm permanent deletion:',
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    household.householdName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Household Name',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) {
+                      setDialogState(() {});
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext, false);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.clay,
+                  ),
+                  onPressed: controller.text.trim() == household.householdName
+                      ? () => Navigator.pop(dialogContext, true)
+                      : null,
+                  child: const Text('Delete Permanently'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (!mounted || typedConfirmation != true) return;
+
+    final success = await _runAction(
+      () => _householdService.deleteHousehold(householdID: widget.householdID),
+      returnHome: true,
+    );
+
+    if (!success && mounted) {
+      _message(
+        'Household deletion may be incomplete. '
+        'Keep the app connected and use Delete Household '
+        'again to retry. Do not create a replacement household '
+        'until deletion finishes.',
+      );
+    }
+  }
+
   void _showMemberMenu(HouseholdMember member) {
     if (_busy) return;
 
@@ -552,9 +655,12 @@ class _MenuScreenState extends State<MenuScreen> {
 
         if (isManager) ...[
           const SizedBox(height: 12),
-          const Text(
-            'Household deletion is not ready yet!',
-            textAlign: TextAlign.center,
+
+          OutlinedButton.icon(
+            onPressed: _busy ? null : () => _deleteHousehold(household),
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: const Text('Delete Household'),
+            style: OutlinedButton.styleFrom(foregroundColor: AppColors.clay),
           ),
         ],
       ],
@@ -614,29 +720,55 @@ class _MenuScreenState extends State<MenuScreen> {
 
         final profile = snapshot.data!;
 
-        void notBuiltYet() {
-          _message('Not ready yet!!!');
-        }
-
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
           children: [
-            _accountField('Username', profile.username, notBuiltYet),
-            _accountField('Display Name', profile.displayName, notBuiltYet),
-            _accountField('Email', profile.email, notBuiltYet),
+            _accountField(
+              'Username',
+              profile.username,
+              () => AccountDialogs.editUsername(
+                context,
+                _accountService,
+                profile,
+              ),
+            ),
+
+            _accountField(
+              'Display Name',
+              profile.displayName,
+              () => AccountDialogs.editDisplayName(
+                context,
+                _accountService,
+                profile,
+              ),
+            ),
+
+            _accountField(
+              'Email',
+              profile.email,
+              () =>
+                  AccountDialogs.changeEmail(context, _accountService, profile),
+            ),
 
             const SizedBox(height: 12),
 
-            OutlinedButton(
-              onPressed: notBuiltYet,
-              child: const Text('Change Password'),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  AccountDialogs.changePassword(context, _accountService),
+              icon: const Icon(Icons.lock_outline),
+              label: const Text('Change Password'),
             ),
 
             const SizedBox(height: 16),
 
-            OutlinedButton(
-              onPressed: notBuiltYet,
-              child: const Text('Customize Avatar'),
+            OutlinedButton.icon(
+              onPressed: () => AccountDialogs.customizeAvatar(
+                context,
+                _accountService,
+                profile,
+              ),
+              icon: const Icon(Icons.palette_outlined),
+              label: const Text('Customize Avatar'),
             ),
 
             const SizedBox(height: 24),
@@ -651,10 +783,14 @@ class _MenuScreenState extends State<MenuScreen> {
 
             const SizedBox(height: 12),
 
-            OutlinedButton(
-              onPressed: notBuiltYet,
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete Account'),
+            OutlinedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () =>
+                        AccountDialogs.deleteAccount(context, _accountService),
+              icon: const Icon(Icons.delete_forever_outlined),
+              style: OutlinedButton.styleFrom(foregroundColor: AppColors.clay),
+              label: const Text('Delete Account'),
             ),
           ],
         );

@@ -469,6 +469,10 @@ class HouseholdService {
 
     final profileRef = _db.collection('users').doc(memberID);
 
+    final formerMemberRef = householdRef
+        .collection('formerMembers')
+        .doc(memberID);
+
     // Make sure the last manager can't remove themselves:
     final currentHousehold = await householdRef.get();
     final currentTarget = await targetRef.get();
@@ -553,6 +557,12 @@ class HouseholdService {
       // This removes their membership from the household:
       transaction.delete(targetRef);
 
+      // This adds that removed member to a list of former members:
+      transaction.set(formerMemberRef, {
+        'userID': memberID,
+        'departedAt': FieldValue.serverTimestamp(),
+      });
+
       // Update the manager count if one gets removed:
       if (targetIsManager) {
         transaction.update(householdRef, {'managerCount': managerCount - 1});
@@ -560,6 +570,171 @@ class HouseholdService {
 
       // NOTE: Currently, removing a member or leaving a household does NOT
       // delete their private stuff list or its items from the database!
+    });
+  }
+
+  // Methods for deleting a household (Manager only):
+
+  // Helper for deleting every document in a collection (in small batches):
+  Future<void> _deleteCollection(
+    CollectionReference<Map<String, dynamic>> collection,
+  ) async {
+    while (true) {
+      final snapshot = await collection.limit(100).get();
+
+      if (snapshot.docs.isEmpty) return;
+
+      final batch = _db.batch();
+
+      for (final document in snapshot.docs) {
+        batch.delete(document.reference);
+      }
+
+      await batch.commit();
+    }
+  }
+
+  // Method for deleting a household and its nested data:
+  Future<void> deleteHousehold({required String householdID}) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      throw StateError('Please sign in first.');
+    }
+
+    if (householdID.isEmpty || householdID.contains('/')) {
+      throw ArgumentError('Invalid household ID');
+    }
+
+    final householdRef = _db.collection('households').doc(householdID);
+
+    final markerRef = householdRef.collection('deletionLocks').doc('active');
+
+    final actorRef = householdRef.collection('members').doc(user.uid);
+
+    final actorSnapshot = await actorRef.get();
+
+    if (actorSnapshot.data()?['memberRole'] != 'manager') {
+      throw StateError('Only Managers can delete a household!');
+    }
+
+    final householdSnapshot = await householdRef.get();
+
+    if (!householdSnapshot.exists) {
+      throw StateError('Household not found...');
+    }
+
+    final markerSnapshot = await markerRef.get();
+
+    // These 'markers' are used in case deletion gets interrupted,
+    // so deletion can pick up wherever it left off.
+    if (!markerSnapshot.exists) {
+      await markerRef.set({
+        'startedBy': user.uid,
+        'startedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Delete Grocery Items and Lists:
+    final groceryLists = await householdRef.collection('groceryLists').get();
+
+    for (final list in groceryLists.docs) {
+      await _deleteCollection(list.reference.collection('items'));
+
+      await list.reference.delete();
+    }
+
+    // Delete Stuff Items and their Lists:
+    final sharedStuffLists = await householdRef
+        .collection('householdItemsLists')
+        .get();
+
+    for (final list in sharedStuffLists.docs) {
+      await _deleteCollection(list.reference.collection('items'));
+
+      await list.reference.delete();
+    }
+
+    // Delete Tasks and Pantry Items:
+    await _deleteCollection(householdRef.collection('tasks'));
+
+    await _deleteCollection(householdRef.collection('pantryItems'));
+
+    // Delete personal Stuff lists for each current and former member:
+    final membersSnapshot = await householdRef.collection('members').get();
+
+    final formerMembersSnapshot = await householdRef
+        .collection('formerMembers')
+        .get();
+
+    final memberIDs = <String>{
+      for (final member in membersSnapshot.docs) member.id,
+      for (final former in formerMembersSnapshot.docs) former.id,
+    };
+
+    for (final memberID in memberIDs) {
+      final memberRef = householdRef.collection('members').doc(memberID);
+
+      final personalLists = await memberRef
+          .collection('personalItemsLists')
+          .get();
+
+      for (final list in personalLists.docs) {
+        await _deleteCollection(list.reference.collection('items'));
+
+        await list.reference.delete();
+      }
+    }
+
+    // Remove all other members:
+    final remainingMembers = await householdRef.collection('members').get();
+
+    for (final member in remainingMembers.docs) {
+      if (member.id == user.uid) continue;
+
+      await _detachMember(
+        householdID: householdID,
+        memberID: member.id,
+        requireManager: true,
+      );
+    }
+
+    // Former members too:
+    await _deleteCollection(householdRef.collection('formerMembers'));
+
+    // Remove the last manager, delete the markers, and delete the household:
+    final profileRef = _db.collection('users').doc(user.uid);
+
+    await _db.runTransaction((transaction) async {
+      final currentHousehold = await transaction.get(householdRef);
+
+      final currentMarker = await transaction.get(markerRef);
+
+      final currentMember = await transaction.get(actorRef);
+
+      final currentProfile = await transaction.get(profileRef);
+
+      if (!currentHousehold.exists ||
+          !currentMarker.exists ||
+          currentMember.data()?['memberRole'] != 'manager' ||
+          currentProfile.data()?['householdID'] != householdID) {
+        throw StateError(
+          'Unable to finish household deletion. Please try again',
+        );
+      }
+
+      if (currentHousehold.data()?['managerCount'] != 1) {
+        throw StateError(
+          'Household membership changed during deletion. '
+          'Please try again.',
+        );
+      }
+
+      transaction.update(profileRef, {'householdID': FieldValue.delete()});
+
+      transaction.delete(actorRef);
+      transaction.delete(markerRef);
+      transaction.delete(householdRef);
     });
   }
 }

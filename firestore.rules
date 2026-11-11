@@ -106,6 +106,10 @@ service cloud.firestore {
         && exists(
           /databases/$(database)/documents/households/$(householdID)
         )
+        // Prevent new users from joining during household deletion:
+        && !exists(
+          /databases/$(database)/documents/households/$(householdID)/deletionLocks/active
+        )
         && hasNoHousehold()
         && profileLinksTo(householdID)
         && getAfter(
@@ -143,6 +147,10 @@ service cloud.firestore {
         && request.auth.uid == userID
         && validProfile(request.resource.data)
         && (
+            request.resource.data.email == resource.data.email
+            || request.resource.data.email == request.auth.token.email
+          )
+        && (
           request.resource.data.get('householdID', null)
             == resource.data.get('householdID', null)
           || (
@@ -168,6 +176,10 @@ service cloud.firestore {
       // Authorizes updates for leaving a household or removing a member
       allow update: if signedIn()
         && validProfile(request.resource.data)
+        && (
+          request.resource.data.email == resource.data.email
+          || request.resource.data.email == request.auth.token.email
+        )
         && resource.data.get('householdID', null) is string
         && request.resource.data.diff(resource.data)
             .affectedKeys().hasOnly(['householdID'])
@@ -178,6 +190,43 @@ service cloud.firestore {
         && (
           request.auth.uid == userID
           || isManager(resource.data.householdID)
+        );
+
+      // Allows for account deletion:
+      allow delete: if signedIn()
+        && request.auth.uid == userID
+        && (
+          // User does not currently belong to a household.
+          resource.data.get('householdID', null) == null
+          ||
+          (
+            // If they belong to a household,
+            // membership must also be deleted.
+            resource.data.get('householdID', null) is string
+            && !existsAfter(
+              /databases/$(database)/documents/households/$(resource.data.householdID)/members/$(userID)
+            )
+            && (
+              // Non-Managers do not change managerCount:
+              get(
+                /databases/$(database)/documents/households/$(resource.data.householdID)/members/$(userID)
+              ).data.memberRole != 'manager'
+              ||
+              (
+                // A departing Manager must leave at least one other manager:
+                get(
+                  /databases/$(database)/documents/households/$(resource.data.householdID)
+                ).data.managerCount > 1
+                && getAfter(
+                  /databases/$(database)/documents/households/$(resource.data.householdID)
+                ).data.managerCount
+                  ==
+                  get(
+                    /databases/$(database)/documents/households/$(resource.data.householdID)
+                  ).data.managerCount - 1
+              )
+            )
+          )
         );
     }
 
@@ -199,6 +248,75 @@ service cloud.firestore {
         return signedIn()
           && request.auth.uid == ownerID
           && stuffMemberRole() in ['manager', 'member', 'child'];
+      }
+
+      // Manager check used for household deletion:
+      function isDeletingManager() {
+        return isManager(householdID)
+          && exists(
+            /databases/$(database)/documents/households/$(householdID)/deletionLocks/active
+          );
+      }
+
+      // Record former members to be able to remove them from a household
+      // while keeping their private stuff list and items:
+      match /formerMembers/{memberID} {
+
+        allow get, list: if isManager(householdID);
+
+        allow create, update: if signedIn()
+          && (
+            request.auth.uid == memberID
+            || isManager(householdID)
+          )
+          && request.resource.data.keys().hasOnly([
+            'userID',
+            'departedAt'
+          ])
+          && request.resource.data.userID == memberID
+          && request.resource.data.departedAt == request.time
+          && exists(
+            /databases/$(database)/documents/households/$(householdID)/members/$(memberID)
+          )
+          && !existsAfter(
+            /databases/$(database)/documents/households/$(householdID)/members/$(memberID)
+          )
+          && (
+            !existsAfter(
+              /databases/$(database)/documents/users/$(memberID)
+            )
+            ||
+            getAfter(
+              /databases/$(database)/documents/users/$(memberID)
+            ).data.get('householdID', null) == null
+          );
+
+        allow delete: if isDeletingManager();
+      }
+      
+      // Household deletion activation and markers:
+      match /deletionLocks/{lockID} {
+        allow get: if lockID == 'active'
+          && isManager(householdID);
+
+        allow create: if lockID == 'active'
+          && isManager(householdID)
+          && request.resource.data.keys().hasAll([
+            'startedBy',
+            'startedAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'startedBy',
+            'startedAt'
+          ])
+          && request.resource.data.startedBy == request.auth.uid
+          && request.resource.data.startedAt == request.time;
+
+        allow delete: if lockID == 'active'
+          && isDeletingManager()
+          && !existsAfter(
+            /databases/$(database)/documents/households/$(householdID)
+          );
       }
 
       // Validate the fields saved by StuffItem.toMap().
@@ -247,6 +365,8 @@ service cloud.firestore {
 
         allow delete: if stuffListID == 'default'
           && canManageSharedStuff();
+
+        allow list, delete: if isDeletingManager();
       }
 
       // Private items belonging to one household member.
@@ -270,6 +390,8 @@ service cloud.firestore {
 
         allow delete: if stuffListID == 'default'
           && canManagePrivateStuff(ownerID);
+
+        allow list, delete: if isDeletingManager();
       }
 
       allow get: if signedIn();
@@ -324,6 +446,17 @@ service cloud.firestore {
                 == resource.data.managerCount - 1
             )
           )
+        );
+
+      allow delete: if isDeletingManager()
+        && !existsAfter(
+          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+        )
+        && getAfter(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        ).data.get('householdID', null) == null
+        && !existsAfter(
+          /databases/$(database)/documents/households/$(householdID)/deletionLocks/active
         );
 
       match /members/{memberID} {
@@ -436,7 +569,11 @@ service cloud.firestore {
             )
           );
 
+        // Allows for member removal and leaving:
         allow delete: if isMember(householdID)
+          && existsAfter(
+            /databases/$(database)/documents/households/$(householdID)/formerMembers/$(memberID)
+          )
           && (
             // Managers may remove other household members:
             isManager(householdID)
@@ -481,6 +618,53 @@ service cloud.firestore {
             )
           );
 
+        // Allows for deleting the final manager during household deletion:
+        allow delete: if isDeletingManager()
+          && memberID == request.auth.uid
+          && resource.data.memberRole == 'manager'
+          && !existsAfter(
+            /databases/$(database)/documents/households/$(householdID)
+          )
+          && existsAfter(
+            /databases/$(database)/documents/households/$(householdID)/formerMembers/$(memberID)
+          )
+          && getAfter(
+            /databases/$(database)/documents/users/$(memberID)
+          ).data.get('householdID', null) == null;
+
+        // Allows for account deletion:
+        allow delete: if signedIn()
+          && request.auth.uid == memberID
+          && !existsAfter(
+            /databases/$(database)/documents/users/$(memberID)
+          )
+          && (
+            (
+              resource.data.memberRole != 'manager'
+              && getAfter(
+                /databases/$(database)/documents/households/$(householdID)
+              ).data.managerCount
+                ==
+                get(
+                  /databases/$(database)/documents/households/$(householdID)
+                ).data.managerCount
+            )
+            ||
+            (
+              resource.data.memberRole == 'manager'
+              && get(
+                /databases/$(database)/documents/households/$(householdID)
+              ).data.managerCount > 1
+              && getAfter(
+                /databases/$(database)/documents/households/$(householdID)
+              ).data.managerCount
+                ==
+                get(
+                  /databases/$(database)/documents/households/$(householdID)
+                ).data.managerCount - 1
+            )
+          );
+
         match /personalItemsLists/{listID} {
           // Other household members cannot read this private list.
           allow read: if signedIn()
@@ -515,6 +699,8 @@ service cloud.firestore {
               && request.resource.data.listName == 'Personal Items'
               && request.resource.data.listVisibility == 'private'
               && request.resource.data.ownerMemberID == request.auth.uid;
+
+            allow list, delete: if isDeletingManager();
           }
         }
 
@@ -528,6 +714,8 @@ service cloud.firestore {
           ])
           && request.resource.data.listName == 'Household Items'
           && request.resource.data.listVisibility == 'shared';
+
+        allow delete: if isDeletingManager();
       }
 
       
@@ -776,6 +964,8 @@ service cloud.firestore {
           && isMember(householdID)
           && isGroceryListOwner();
 
+        allow get, list, delete: if isDeletingManager();
+
         match /items/{groceryItemID} {
           allow read: if canViewParentList();
 
@@ -787,6 +977,8 @@ service cloud.firestore {
           allow update: if canViewParentList();
 
           allow delete: if canViewParentList();
+
+          allow get, list, delete: if isDeletingManager();
         }
       }
 

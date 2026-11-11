@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:characters/characters.dart';
 
 import '../models.dart';
 
@@ -126,8 +127,10 @@ class AccountService {
     }
 
     // Accepts up to 32 UTF-16 code units, for emojis:
-    if (cleanedSymbol != null && cleanedSymbol.length > 32) {
-      throw ArgumentError('Avatar symbol is too long.');
+    if (cleanedSymbol != null) {
+      if (cleanedSymbol.characters.length != 1 || cleanedSymbol.length > 32) {
+        throw ArgumentError('Choose only one letter, number, or emoji.');
+      }
     }
 
     // Color code validation for avatar color:
@@ -283,5 +286,107 @@ class AccountService {
   // Tiny method to sign out the user (via menu screen):
   Future<void> signOut() async {
     await _auth.signOut();
+  }
+
+  // Method to delete your account:
+  Future<void> deleteAccount({required String currentPassword}) async {
+    final user = _requireUser();
+    final uid = user.uid;
+
+    await reauthenticateWithPassword(currentPassword);
+
+    final profileRef = _db.collection('users').doc(uid);
+    final profileSnapshot = await profileRef.get();
+    final originalProfile = profileSnapshot.data();
+
+    if (originalProfile == null) {
+      throw StateError('Your account was not found...');
+    }
+
+    final householdID = originalProfile['householdID'] as String?;
+
+    DocumentReference<Map<String, dynamic>>? householdRef;
+    DocumentReference<Map<String, dynamic>>? memberRef;
+
+    if (householdID != null && householdID.isNotEmpty) {
+      householdRef = _db.collection('households').doc(householdID);
+      memberRef = householdRef.collection('members').doc(uid);
+    }
+
+    await _db.runTransaction((transaction) async {
+      final currentProfile = await transaction.get(profileRef);
+
+      if (!currentProfile.exists) {
+        throw StateError('Your profile no longer exists...');
+      }
+
+      if (memberRef != null && householdRef != null) {
+        final currentHouseholdRef = householdRef;
+        final currentMemberRef = memberRef;
+        final formerMemberRef = currentHouseholdRef
+            .collection('formerMembers')
+            .doc(uid);
+
+        final householdSnapshot = await transaction.get(currentHouseholdRef);
+        final memberSnapshot = await transaction.get(currentMemberRef);
+
+        final memberData = memberSnapshot.data();
+        final householdData = householdSnapshot.data();
+
+        if (householdData == null || memberData == null) {
+          throw StateError(
+            'Your household membership could not be verified...',
+          );
+        }
+
+        final role = memberData['memberRole'];
+
+        if (role == 'manager') {
+          final count = householdData['managerCount'];
+
+          if (count is! int || count <= 1) {
+            throw StateError(
+              'You are the last remaining Manager. '
+              'Please assign another Manager before '
+              'attempting to delete your account!',
+            );
+          }
+
+          transaction.update(currentHouseholdRef, {'managerCount': count - 1});
+        }
+
+        transaction.delete(currentMemberRef);
+        transaction.set(formerMemberRef, {
+          'userID': uid,
+          'departedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      transaction.delete(profileRef);
+    });
+
+    try {
+      await user.delete();
+    } catch (error) {
+      // Restore a profile so the authenticated user can access onboarding:
+      final restoredProfile = Map<String, dynamic>.from(originalProfile)
+        ..remove('householdID');
+
+      try {
+        await profileRef.set(restoredProfile);
+      } catch (_) {
+        throw StateError(
+          'Account deletion did not finish and '
+          'profile recovery also failed. '
+          'Original error: $error',
+        );
+      }
+
+      throw StateError(
+        'Your account was not deleted, but your household '
+        'membership was removed. You can sign in and join '
+        'a household again. Error: $error',
+      );
+    }
   }
 }
