@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models.dart';
 import '../services/grocery_service.dart';
@@ -9,6 +11,8 @@ import '../navigation/househeld_navigation.dart';
 import 'grocery_list_form_screen.dart';
 import 'grocery_items_screen.dart';
 import 'shopping_screen.dart';
+
+import 'dart:async';
 
 enum _ListSort { name, size }
 
@@ -25,6 +29,23 @@ class GroceryScreen extends StatefulWidget {
 class _GroceryScreenState extends State<GroceryScreen> {
   final GroceryService _service = GroceryService();
 
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _membershipSubscription;
+
+  String? _memberRole;
+
+  String get _currentUserID => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  bool get _canCreateLists =>
+      _memberRole == 'manager' || _memberRole == 'member';
+
+  bool _canEditListItems(GroceryList list) {
+    return list.canEditItems(
+      memberID: _currentUserID,
+      memberRole: _memberRole ?? '',
+    );
+  }
+
   late final Stream<List<GroceryList>> _listsStream;
 
   _ListSort _sort = _ListSort.name;
@@ -35,12 +56,57 @@ class _GroceryScreenState extends State<GroceryScreen> {
 
   final Map<String, int> _itemCounts = {};
 
+  final Map<String, Stream<List<GroceryItem>>> _itemStreams = {};
+
+  // Keeps Grocery List item stream stable, for sorting:
+  Stream<List<GroceryItem>> _itemsStreamFor(String groceryListID) {
+    return _itemStreams.putIfAbsent(
+      groceryListID,
+      () => _service.watchItems(
+        householdID: widget.householdID,
+        groceryListID: groceryListID,
+      ),
+    );
+  }
+
   String? _resetPromptedRevisionKey;
 
   @override
   void initState() {
     super.initState();
     _listsStream = _service.watchVisibleLists(widget.householdID);
+
+    final userID = _currentUserID;
+    if (userID.isEmpty) return;
+
+    _membershipSubscription = FirebaseFirestore.instance
+        .collection('households')
+        .doc(widget.householdID)
+        .collection('members')
+        .doc(userID)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (!mounted) return;
+
+            setState(() {
+              _memberRole = snapshot.data()?['memberRole'] as String?;
+            });
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+
+            setState(() {
+              _memberRole = null;
+            });
+          },
+        );
+  }
+
+  @override
+  void dispose() {
+    _membershipSubscription?.cancel();
+    super.dispose();
   }
 
   // Reusable confirmation pop-up UI:
@@ -89,6 +155,12 @@ class _GroceryScreenState extends State<GroceryScreen> {
     GroceryList? existing,
     String? copyFromListID,
   }) async {
+    if (!_canCreateLists) return;
+
+    if (existing != null && existing.ownerMemberID != _currentUserID) {
+      return;
+    }
+
     final id = await Navigator.push<String>(
       context,
       MaterialPageRoute(
@@ -142,7 +214,7 @@ class _GroceryScreenState extends State<GroceryScreen> {
 
   // Method for the Grocery List options submenu
   Future<void> _showOptions(GroceryList list) async {
-    if (_busy) return;
+    if (_busy || !_canEditListItems(list)) return;
     await showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -221,7 +293,8 @@ class _GroceryScreenState extends State<GroceryScreen> {
                   }
                 },
               ),
-            ] else ...[
+            ] else if (_canCreateLists &&
+                list.ownerMemberID == _currentUserID) ...[
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('Edit'),
@@ -262,11 +335,14 @@ class _GroceryScreenState extends State<GroceryScreen> {
       _resetPromptedRevisionKey = null;
       return;
     }
+
+    if (!_canCreateLists) return;
+
     final key = '${list.groceryListID}:${list.groceryItemsRevision}';
     if (_resetDialogOpen || _resetPromptedRevisionKey == key) return;
     _resetPromptedRevisionKey = key;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || _resetDialogOpen) return;
+      if (!mounted || _resetDialogOpen || !_canCreateLists) return;
       _resetDialogOpen = true;
       try {
         final reset = await _confirm(
@@ -336,24 +412,33 @@ class _GroceryScreenState extends State<GroceryScreen> {
             const SizedBox(height: 8),
           ],
           StreamBuilder<List<GroceryItem>>(
-            stream: _service.watchItems(
-              householdID: widget.householdID,
-              groceryListID: list.groceryListID,
-            ),
+            key: ValueKey('grocery-items-${list.groceryListID}'),
+            stream: _itemsStreamFor(list.groceryListID),
             builder: (context, snapshot) {
-              final count = snapshot.data?.length ?? 0;
+              final count =
+                  snapshot.data?.length ?? _itemCounts[list.groceryListID] ?? 0;
+
               if (snapshot.hasData &&
                   _itemCounts[list.groceryListID] != count) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _itemCounts[list.groceryListID] != count) {
-                    setState(() => _itemCounts[list.groceryListID] = count);
+                  if (!mounted) return;
+
+                  if (_itemCounts[list.groceryListID] != count) {
+                    setState(() {
+                      _itemCounts[list.groceryListID] = count;
+                    });
                   }
                 });
               }
+
               return GroceryRowCard(
                 list: list,
                 itemCount: count,
-                onMenu: () => _showOptions(list),
+
+                onMenu: _canEditListItems(list)
+                    ? () => _showOptions(list)
+                    : null,
+
                 onViewItems: () {
                   Navigator.push<void>(
                     context,
@@ -365,36 +450,40 @@ class _GroceryScreenState extends State<GroceryScreen> {
                     ),
                   );
                 },
-                onShop: () async {
-                  if (list.isComplete || count == 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Add some items or reopen the list before shopping!',
-                        ),
-                      ),
-                    );
-                    return;
-                  }
 
-                  final confirmed = await _confirm(
-                    'Shopping Trip',
-                    'Start shopping for ${list.groceryListName}?',
-                  );
+                onShop: !_canEditListItems(list)
+                    ? null
+                    : () async {
+                        if (list.isComplete || count == 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Add some items or reopen '
+                                'the list before shopping!',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
 
-                  if (!confirmed || !context.mounted) return;
+                        final confirmed = await _confirm(
+                          'Shopping Trip',
+                          'Start shopping for ${list.groceryListName}?',
+                        );
 
-                  await Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ShoppingScreen(
-                        householdID: widget.householdID,
-                        groceryListID: list.groceryListID,
-                        listName: list.groceryListName,
-                      ),
-                    ),
-                  );
-                },
+                        if (!confirmed || !context.mounted) return;
+
+                        await Navigator.push<void>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ShoppingScreen(
+                              householdID: widget.householdID,
+                              groceryListID: list.groceryListID,
+                              listName: list.groceryListName,
+                            ),
+                          ),
+                        );
+                      },
               );
             },
           ),
@@ -485,12 +574,14 @@ class _GroceryScreenState extends State<GroceryScreen> {
                 ),
               ],
             ),
-            floatingActionButton: FloatingActionButton(
-              backgroundColor: AppColors.clay,
-              foregroundColor: Colors.white,
-              onPressed: _busy ? null : () => _openForm(),
-              child: const Icon(Icons.add),
-            ),
+            floatingActionButton: _canCreateLists
+                ? FloatingActionButton(
+                    backgroundColor: AppColors.clay,
+                    foregroundColor: Colors.white,
+                    onPressed: _busy ? null : () => _openForm(),
+                    child: const Icon(Icons.add),
+                  )
+                : null,
             bottomNavigationBar: HouseheldBottomNav(
               currentIndex: 4,
               onTap: _handleNav,
@@ -503,21 +594,45 @@ class _GroceryScreenState extends State<GroceryScreen> {
 
   // Sorting logic:
   Widget _sortedListView(List<GroceryList> lists, String emptyText) {
-    final sorted = [...lists];
+    final sorted = List<GroceryList>.from(lists);
+
     sorted.sort((a, b) {
-      if (a.isDefault != b.isDefault) return a.isDefault ? -1 : 1;
-      final compare = _sort == _ListSort.name
-          ? a.groceryListName.toLowerCase().compareTo(
-              b.groceryListName.toLowerCase(),
-            )
-          : (_itemCounts[a.groceryListID] ?? 0).compareTo(
-              _itemCounts[b.groceryListID] ?? 0,
-            );
-      if (compare != 0) return _ascending ? compare : -compare;
-      return a.groceryListName.toLowerCase().compareTo(
+      // Keep the household default Grocery List first:
+      if (a.isDefault != b.isDefault) {
+        return a.isDefault ? -1 : 1;
+      }
+
+      int comparison;
+
+      if (_sort == _ListSort.name) {
+        comparison = a.groceryListName.toLowerCase().compareTo(
+          b.groceryListName.toLowerCase(),
+        );
+      } else {
+        final countA = _itemCounts[a.groceryListID] ?? 0;
+        final countB = _itemCounts[b.groceryListID] ?? 0;
+
+        comparison = countA.compareTo(countB);
+      }
+
+      // Apply ascending or descending direction:
+      if (comparison != 0) {
+        return _ascending ? comparison : -comparison;
+      }
+
+      // If item counts match, sort by name:
+      comparison = a.groceryListName.toLowerCase().compareTo(
         b.groceryListName.toLowerCase(),
       );
+
+      if (comparison != 0) {
+        return comparison;
+      }
+
+      // Tie-breaker if name and item counts both match:
+      return a.groceryListID.compareTo(b.groceryListID);
     });
+
     return _listCards(sorted, emptyText: emptyText);
   }
 }

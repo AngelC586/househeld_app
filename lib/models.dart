@@ -7,12 +7,18 @@ class UserProfile {
   final String displayName;
   final String? householdID;
 
+  // Optional avatar customization variables:
+  final String? avatarSymbol;
+  final int? avatarColor;
+
   const UserProfile({
     required this.uid,
     required this.username,
     required this.email,
     required this.displayName,
     this.householdID,
+    this.avatarSymbol,
+    this.avatarColor,
   });
 
   factory UserProfile.fromMap(String uid, Map<String, dynamic> data) {
@@ -22,6 +28,8 @@ class UserProfile {
       email: data['email'] as String? ?? '',
       displayName: data['displayName'] as String? ?? '',
       householdID: data['householdID'] as String?,
+      avatarSymbol: data['avatarSymbol'] as String?,
+      avatarColor: data['avatarColor'] as int?,
     );
   }
 
@@ -30,6 +38,8 @@ class UserProfile {
     'email': email,
     'displayName': displayName,
     if (householdID != null) 'householdID': householdID,
+    if (avatarSymbol != null) 'avatarSymbol': avatarSymbol,
+    if (avatarColor != null) 'avatarColor': avatarColor,
   };
 }
 
@@ -37,11 +47,13 @@ class Household {
   final String householdID;
   final String householdName;
   final String creatorID;
+  final int? managerCount;
 
   const Household({
     required this.householdID,
     required this.householdName,
     required this.creatorID,
+    this.managerCount,
   });
 
   factory Household.fromMap(String householdID, Map<String, dynamic> data) {
@@ -49,12 +61,15 @@ class Household {
       householdID: householdID,
       householdName: data['householdName'] as String,
       creatorID: data['creatorID'] as String,
+      managerCount: data['managerCount'] as int?,
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {'householdName': householdName, 'creatorID': creatorID};
-  }
+  Map<String, dynamic> toMap() => {
+    'householdName': householdName,
+    'creatorID': creatorID,
+    if (managerCount != null) 'managerCount': managerCount,
+  };
 }
 
 class HouseholdMember {
@@ -63,12 +78,22 @@ class HouseholdMember {
   final String memberRole;
   final String displayName;
 
+  // Avatar customization:
+  final String? avatarSymbol;
+  final int? avatarColor;
+
   const HouseholdMember({
     required this.userID,
     required this.householdID,
     required this.memberRole,
     this.displayName = '',
+    this.avatarSymbol,
+    this.avatarColor,
   });
+
+  bool get isManager => memberRole == 'manager';
+  bool get isMember => memberRole == 'member';
+  bool get isChild => memberRole == 'child';
 
   factory HouseholdMember.fromMap(Map<String, dynamic> data) {
     return HouseholdMember(
@@ -76,6 +101,8 @@ class HouseholdMember {
       householdID: data['householdID'] as String? ?? '',
       memberRole: data['memberRole'] as String? ?? 'member',
       displayName: data['displayName'] as String? ?? '',
+      avatarSymbol: data['avatarSymbol'] as String?,
+      avatarColor: data['avatarColor'] as int?,
     );
   }
 
@@ -84,6 +111,8 @@ class HouseholdMember {
     'householdID': householdID,
     'memberRole': memberRole,
     'displayName': displayName,
+    if (avatarSymbol != null) 'avatarSymbol': avatarSymbol,
+    if (avatarColor != null) 'avatarColor': avatarColor,
   };
 }
 
@@ -393,6 +422,24 @@ class GroceryList {
         visibleMemberIDs.contains(memberID);
   }
 
+  // Use with the signed-in users verified household membership
+  bool canEditItems({
+    required String memberID,
+    required String memberRole,
+  }) {
+    if (!canView(memberID)) return false;
+
+    if (memberRole == 'manager' || memberRole == 'member') {
+      return true;
+    }
+
+    return memberRole == 'child' && 
+      groceryListID == 'personal_$memberID' &&
+      ownerMemberID == memberID && 
+      groceryListVisibility == 'restricted' && 
+      visibleMemberIDs.isEmpty;
+  }
+
   factory GroceryList.fromMap(String id, Map<String, dynamic> data) {
     return GroceryList(
       groceryListID: id,
@@ -494,3 +541,42 @@ class ActivityEntry {
     this.isRestock = false,
   });
 }
+
+class InboxMessage {
+  final String messageId;
+  final String subject;
+  final String body;
+  final String sentByMemberID;
+  final List<String> sentToMemberIDs; // up to 8
+  final DateTime sentAt;
+  final bool isRead;
+ 
+  const InboxMessage({
+    required this.messageId,
+    required this.subject,
+    required this.body,
+    required this.sentByMemberID,
+    required this.sentToMemberIDs,
+    required this.sentAt,
+    this.isRead = false,
+  });
+ 
+  String get bodyPreview {
+    final trimmed = body.trim();
+    if (trimmed.length <= 50) return trimmed;
+    return '${trimmed.substring(0, 50)}…';
+  }
+ 
+  InboxMessage copyWith({bool? isRead}) {
+    return InboxMessage(
+      messageId: messageId,
+      subject: subject,
+      body: body,
+      sentByMemberID: sentByMemberID,
+      sentToMemberIDs: sentToMemberIDs,
+      sentAt: sentAt,
+      isRead: isRead ?? this.isRead,
+    );
+  }
+}
+

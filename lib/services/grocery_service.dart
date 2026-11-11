@@ -37,8 +37,68 @@ class GroceryService {
         .collection('groceryLists');
   }
 
+  // Create the user's automatic private list without resetting existing data:
+  Future<String> ensurePrivateList({required String householdID}) async {
+    final userID = _requireUserID();
+    _validateHouseholdID(householdID);
+
+    final memberRef = _db
+        .collection('households')
+        .doc(householdID)
+        .collection('members')
+        .doc(userID);
+
+    final listRef = _lists(householdID).doc('personal_$userID');
+
+    await _db.runTransaction<void>((transaction) async {
+      final membership = await transaction.get(memberRef);
+      final role = membership.data()?['memberRole'];
+
+      if (!['manager', 'member', 'child'].contains(role)) {
+        throw StateError('Your household membership could not be verified.');
+      }
+
+      final existing = await transaction.get(listRef);
+      final data = existing.data();
+
+      if (data != null) {
+        final list = GroceryList.fromMap(existing.id, data);
+
+        if (list.ownerMemberID != userID ||
+            list.groceryListVisibility != 'restricted' ||
+            list.visibleMemberIDs.isNotEmpty) {
+          throw StateError(
+            'Your automatic Grocery List is not configured as private.',
+          );
+        }
+
+        return;
+      }
+
+      final list = GroceryList(
+        groceryListID: listRef.id,
+        groceryListName: 'My Grocery List',
+        groceryListVisibility: 'restricted',
+        ownerMemberID: userID,
+        visibleMemberIDs: const [],
+        groceryListStatus: groceryListIncomplete,
+        groceryItemsRevision: 0,
+      );
+
+      transaction.set(listRef, list.toMap());
+    });
+
+    return listRef.id;
+  }
+
+  // Ensure the user's private list exists before loading their lists:
+  Stream<List<GroceryList>> watchVisibleLists(String householdID) async* {
+    await ensurePrivateList(householdID: householdID);
+    yield* _watchVisibleLists(householdID);
+  }
+
   // Listen to all lists that the signed-in user is allowed to see:
-  Stream<List<GroceryList>> watchVisibleLists(String householdID) {
+  Stream<List<GroceryList>> _watchVisibleLists(String householdID) {
     final String userID;
 
     try {

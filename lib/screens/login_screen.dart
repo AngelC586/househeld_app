@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../services/account_service.dart';
 import 'registration_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -58,6 +59,85 @@ class _LoginScreenState extends State<LoginScreen> {
           isLoading = false;
         });
       }
+    }
+  }
+
+  // Forgot password method:
+  Future<void> forgotPassword() async {
+    var email = emailController.text.trim();
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter your account email address. '
+              'We will send you a password-reset link.',
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue: email,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                email = value.trim();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Send Reset Email'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || submitted != true) return;
+
+    try {
+      await AccountService().sendPasswordResetEmail(email);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'If an account exists with that email, '
+            'a password-reset message will be sent.',
+          ),
+        ),
+      );
+    } on ArgumentError catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message.toString())));
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.code == 'invalid-email'
+                ? 'Please enter a valid email address.'
+                : error.code == 'too-many-requests'
+                ? 'Too many attempts. Try again later.'
+                : 'Unable to send reset email. Try again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -146,6 +226,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? 'Show Password'
                         : 'Hide Password',
                   ),
+                ),
+              ),
+
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: isLoading ? null : forgotPassword,
+                  child: const Text('Forgot Password?'),
                 ),
               ),
 

@@ -13,6 +13,8 @@ import '../services/household_service.dart';
 import '../services/task_service.dart';
 import '../services/pantry_service.dart';
 import '../services/stuff_service.dart';
+import 'inbox_screen.dart';
+import '../widgets/inbox_message_card.dart';
 
 //import '../services/grocery_service.dart';
 
@@ -259,6 +261,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           IconButton(
+            onPressed: _showInboxPreview,
+            icon: const Icon(Icons.mail_outline, color: Colors.white),
+            tooltip: 'Inbox',
+          ),
+          IconButton(
             onPressed: widget.onLogout,
             icon: const Icon(Icons.logout, color: Colors.white),
             tooltip: 'Log out',
@@ -267,6 +274,63 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  static const List<InboxMessage> _recentMessages = [];
+ 
+  void _showInboxPreview() {
+    final recent = _recentMessages.take(5).toList();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Inbox'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: recent.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text('No messages yet.', style: AppText.bodySoft),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: recent
+                      .map(
+                        (m) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: !m.isRead
+                              ? const Icon(Icons.circle, size: 10, color: AppColors.clay)
+                              : const SizedBox(width: 10),
+                          title: Text(
+                            m.subject,
+                            style: TextStyle(
+                              fontWeight: m.isRead ? FontWeight.w500 : FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(formatMessageTime(m.sentAt)),
+                        ),
+                      )
+                      .toList(),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const InboxScreen()),
+              );
+            },
+            child: const Text('View Inbox →'),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildDashboard({
     required List<HouseholdMember> members,

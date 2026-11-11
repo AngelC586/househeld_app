@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models.dart';
 import '../services/grocery_service.dart';
@@ -8,6 +10,8 @@ import '../widgets/grocery_item_row_card.dart';
 
 import 'grocery_item_form_screen.dart';
 import 'shopping_screen.dart';
+
+import 'dart:async';
 
 enum GroceryItemSort { name, type, quantity }
 
@@ -30,6 +34,20 @@ class GroceryItemsScreen extends StatefulWidget {
 class _GroceryItemsScreenState extends State<GroceryItemsScreen> {
   final GroceryService _groceryService = GroceryService();
 
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _membershipSubscription;
+
+  String? _memberRole;
+
+  String get _currentUserID => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  bool _canEditListItems(GroceryList list) {
+    return list.canEditItems(
+      memberID: _currentUserID,
+      memberRole: _memberRole ?? '',
+    );
+  }
+
   late final Stream<GroceryList?> _listStream;
   late final Stream<List<GroceryItem>> _itemsStream;
 
@@ -50,6 +68,38 @@ class _GroceryItemsScreenState extends State<GroceryItemsScreen> {
       householdID: widget.householdID,
       groceryListID: widget.groceryListID,
     );
+
+    final userID = _currentUserID;
+    if (userID.isEmpty) return;
+
+    _membershipSubscription = FirebaseFirestore.instance
+        .collection('households')
+        .doc(widget.householdID)
+        .collection('members')
+        .doc(userID)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (!mounted) return;
+
+            setState(() {
+              _memberRole = snapshot.data()?['memberRole'] as String?;
+            });
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+
+            setState(() {
+              _memberRole = null;
+            });
+          },
+        );
+  }
+
+  @override
+  void dispose() {
+    _membershipSubscription?.cancel();
+    super.dispose();
   }
 
   String _errorMessage(Object error) {
@@ -646,7 +696,9 @@ class _GroceryItemsScreenState extends State<GroceryItemsScreen> {
                     ),
                   ),
 
-                  if (!list.isComplete && allItems.isNotEmpty)
+                  if (_canEditListItems(list) &&
+                      !list.isComplete &&
+                      allItems.isNotEmpty)
                     SafeArea(
                       top: false,
                       child: Padding(
@@ -665,7 +717,7 @@ class _GroceryItemsScreenState extends State<GroceryItemsScreen> {
                     ),
                 ],
               ),
-              floatingActionButton: list.isComplete
+              floatingActionButton: list.isComplete || !_canEditListItems(list)
                   ? null
                   : FloatingActionButton(
                       onPressed: _isSaving ? null : _showAddOptions,
@@ -717,8 +769,12 @@ class _GroceryItemsScreenState extends State<GroceryItemsScreen> {
 
         return GroceryItemRowCard(
           item: item,
-          onOptions: () => _showItemOptions(list, item, allItems),
-          onQuantity: () => _changeQuantity(list, item, allItems),
+          onOptions: _canEditListItems(list) && !_isSaving
+              ? () => _showItemOptions(list, item, allItems)
+              : null,
+          onQuantity: _canEditListItems(list) && !list.isComplete && !_isSaving
+              ? () => _changeQuantity(list, item, allItems)
+              : null,
         );
       },
     );

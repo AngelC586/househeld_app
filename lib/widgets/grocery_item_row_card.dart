@@ -13,8 +13,8 @@ class GroceryItemRowCard extends StatelessWidget {
   });
 
   final GroceryItem item;
-  final VoidCallback onOptions;
-  final VoidCallback onQuantity;
+  final VoidCallback? onOptions;
+  final VoidCallback? onQuantity;
 
   @override
   Widget build(BuildContext context) {
@@ -117,11 +117,12 @@ class GroceryItemRowCard extends StatelessWidget {
               ),
 
               // Grocery Item options
-              IconButton(
-                onPressed: onOptions,
-                tooltip: 'Grocery Item options',
-                icon: const Icon(Icons.more_vert, color: AppColors.inkSoft),
-              ),
+              if (onOptions != null)
+                IconButton(
+                  onPressed: onOptions,
+                  tooltip: 'Grocery Item options',
+                  icon: const Icon(Icons.more_vert, color: AppColors.inkSoft),
+                ),
             ],
           ),
         ),
