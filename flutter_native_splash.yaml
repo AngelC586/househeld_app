@@ -1,0 +1,16 @@
+flutter_native_splash:
+  color: "#2F4B3C"
+  color_dark: "#2F4B3C"
+
+  image: assets/images/househeld_splash_icon.png
+  image_dark: assets/images/househeld_splash_icon.png
+
+  android: true
+  ios: true
+  web: true
+
+  android_12:
+    color: "#2F4B3C"
+    color_dark: "#2F4B3C"
+    image: assets/images/househeld_splash_icon.png
+    image_dark: assets/images/househeld_splash_icon.png
