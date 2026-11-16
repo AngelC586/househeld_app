@@ -593,3 +593,85 @@ class InboxMessage {
     );
   }
 }
+
+const String reminderUpcoming = 'upcoming';
+const String reminderComplete = 'complete';
+
+const String reminderPriorityLow = 'low';
+const String reminderPriorityMedium = 'medium';
+const String reminderPriorityHigh = 'high';
+
+const List<String> reminderPriorities = [
+  reminderPriorityLow,
+  reminderPriorityMedium,
+  reminderPriorityHigh,
+];
+
+const int reminderTitleMaxLength = 50;
+const int reminderNotesMaxLength = 250;
+
+class Reminder {
+  final String reminderID;
+  final String reminderTitle;
+  final String reminderNotes;
+  final DateTime reminderDateTime;
+  final String reminderStatus;
+  final String reminderPriority;
+
+  const Reminder({
+    required this.reminderID,
+    required this.reminderTitle,
+    this.reminderNotes = '',
+    required this.reminderDateTime,
+    this.reminderStatus = reminderUpcoming,
+    this.reminderPriority = reminderPriorityMedium,
+  });
+
+  bool get isCompleted => reminderStatus == reminderComplete;
+
+  String get displayPriority =>
+      reminderPriority[0].toUpperCase() + reminderPriority.substring(1);
+
+  int get priorityRank {
+    switch (reminderPriority) {
+      case reminderPriorityHigh:
+        return 0;
+      case reminderPriorityMedium:
+        return 1;
+      default:
+        return 2;
+    }
+  }
+
+  Reminder copyWith({
+    String? reminderTitle,
+    String? reminderNotes,
+    DateTime? reminderDateTime,
+    String? reminderStatus,
+    String? reminderPriority,
+  }) {
+    return Reminder(
+      reminderID: reminderID,
+      reminderTitle: reminderTitle ?? this.reminderTitle,
+      reminderNotes: reminderNotes ?? this.reminderNotes,
+      reminderDateTime: reminderDateTime ?? this.reminderDateTime,
+      reminderStatus: reminderStatus ?? this.reminderStatus,
+      reminderPriority: reminderPriority ?? this.reminderPriority,
+    );
+  }
+}
+
+List<Reminder> sortRemindersByPriority(List<Reminder> reminders) {
+  final sorted = [...reminders];
+
+  sorted.sort((a, b) {
+    final byPriority = a.priorityRank.compareTo(b.priorityRank);
+    if (byPriority != 0) return byPriority;
+
+    return a.reminderTitle.toLowerCase().compareTo(
+      b.reminderTitle.toLowerCase(),
+    );
+  });
+
+  return sorted;
+}
