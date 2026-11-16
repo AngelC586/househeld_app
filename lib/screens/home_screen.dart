@@ -2,19 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../theme/app_theme.dart';
+import '../navigation/househeld_navigation.dart';
 import '../widgets/avatar_chip.dart';
 import '../widgets/househeld_bottom_nav.dart';
 import '../widgets/low_stock_row.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/task_row_card.dart';
 import '../widgets/zero_state.dart';
-import '../navigation/househeld_navigation.dart';
+import '../widgets/inbox_message_card.dart';
+import '../widgets/reminder_form_dialog.dart';
+import '../widgets/reminders_home_window.dart';
 import '../services/household_service.dart';
 import '../services/task_service.dart';
 import '../services/pantry_service.dart';
 import '../services/stuff_service.dart';
+import '../services/inbox_service.dart';
 import 'inbox_screen.dart';
-import '../widgets/inbox_message_card.dart';
+import 'reminders_screen.dart';
 
 //import '../services/grocery_service.dart';
 
@@ -275,62 +279,119 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  static const List<InboxMessage> _recentMessages = [];
- 
-  void _showInboxPreview() {
-    final recent = _recentMessages.take(5).toList();
-    showDialog(
+  final List<Reminder> _reminders = [];
+
+  Future<void> _openAddReminder() async {
+    final result = await showReminderFormDialog(context);
+
+    if (result == null) return;
+  }
+
+  void _openRemindersScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const RemindersScreen()),
+    );
+  }
+
+  Future<void> _showInboxPreview() async {
+    final householdID = widget.userProfile.householdID;
+    if (householdID == null || householdID.isEmpty) return;
+
+    final messagesStream = InboxService().watchMessages(householdID);
+    final membersStream = _householdService.watchMembers(householdID);
+
+    final openInbox = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Inbox'),
         content: SizedBox(
           width: double.maxFinite,
-          child: recent.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text('No messages yet.', style: AppText.bodySoft),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: recent
-                      .map(
-                        (m) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: !m.isRead
-                              ? const Icon(Icons.circle, size: 10, color: AppColors.clay)
-                              : const SizedBox(width: 10),
-                          title: Text(
-                            m.subject,
-                            style: TextStyle(
-                              fontWeight: m.isRead ? FontWeight.w500 : FontWeight.w700,
+          child: StreamBuilder<List<HouseholdMember>>(
+            stream: membersStream,
+            builder: (context, membersSnapshot) {
+              final members = membersSnapshot.data ?? [];
+
+              return StreamBuilder<List<InboxMessage>>(
+                stream: messagesStream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Text(
+                      'Unable to load your messages. Please try again.',
+                    );
+                  }
+
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+
+                  final recent = snapshot.data!.take(5).toList();
+
+                  if (recent.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text('No messages yet.', style: AppText.bodySoft),
+                    );
+                  }
+
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final message in recent)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: !message.isRead
+                                ? const Icon(
+                                    Icons.circle,
+                                    size: 10,
+                                    color: AppColors.clay,
+                                  )
+                                : const SizedBox(width: 10),
+                            title: Text(
+                              message.subject,
+                              style: TextStyle(
+                                fontWeight: message.isRead
+                                    ? FontWeight.w500
+                                    : FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'From: ${_memberName(members, message.sentByMemberID) ?? 'Unknown member'}'
+                              '\n${formatMessageTime(message.sentAt)}',
                             ),
                           ),
-                          subtitle: Text(formatMessageTime(m.sentAt)),
-                        ),
-                      )
-                      .toList(),
-                ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Close'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const InboxScreen()),
-              );
-            },
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('View Inbox →'),
           ),
         ],
       ),
     );
-  }
 
+    if (!mounted || openInbox != true) return;
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => InboxScreen(householdID: householdID)),
+    );
+  }
 
   Widget _buildDashboard({
     required List<HouseholdMember> members,
@@ -375,6 +436,14 @@ class _HomeScreenState extends State<HomeScreen> {
             for (var i = 0; i < members.length; i++)
               AvatarChip(member: members[i], colorSeed: i),
           ],
+        ),
+
+        const SizedBox(height: 22),
+
+        RemindersHomeWindow(
+          reminders: _reminders.where((r) => !r.isCompleted).toList(),
+          onAdd: _openAddReminder,
+          onViewAll: _openRemindersScreen,
         ),
 
         const SizedBox(height: 22),

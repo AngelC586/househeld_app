@@ -7,6 +7,8 @@ import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/household_onboarding_screen.dart';
 import 'services/household_service.dart';
+import 'screens/email_verification_screen.dart';
+import 'theme/app_theme.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -16,7 +18,7 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  final _authStream = FirebaseAuth.instance.authStateChanges();
+  final _authStream = FirebaseAuth.instance.userChanges();
   final _householdService = HouseholdService();
 
   Future<void> _signOut() async {
@@ -24,7 +26,23 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Widget _loadingScreen() {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return const Scaffold(
+      backgroundColor: AppColors.forest,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.home, size: 100, color: Color(0xFFF1EEE6)),
+
+              SizedBox(height: 28),
+
+              CircularProgressIndicator(color: Color(0xFFF1EEE6)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _messageScreen(String message) {
@@ -74,6 +92,15 @@ class _AuthGateState extends State<AuthGate> {
             'Waiting for your profile to finish setting up. '
             'If this message remains, your profile may not have '
             'been saved successfully.',
+          );
+        }
+
+        final requiresVerification =
+            profileData['requiresEmailVerification'] == true;
+
+        if (requiresVerification && !user.emailVerified) {
+          return EmailVerificationScreen(
+            key: ValueKey('verification-${user.uid}'),
           );
         }
 

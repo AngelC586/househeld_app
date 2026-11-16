@@ -57,8 +57,14 @@ service cloud.firestore {
         /databases/$(database)/documents/users/$(request.auth.uid)
       ).data;
 
-      return profile.get('householdID', null) == null
-        || profile.get('householdID', null) == '';
+      return (
+        profile.get('householdID', null) == null
+        || profile.get('householdID', null) == ''
+      )
+      && (
+        profile.get('requiresEmailVerification', false) == false
+        || request.auth.token.email_verified == true
+      );
     }
 
     // Check the profile's household link after the transaction.
@@ -86,7 +92,8 @@ service cloud.firestore {
           'displayName',
           'householdID',
           'avatarSymbol',
-          'avatarColor'
+          'avatarColor',
+          'requiresEmailVerification'
         ])
         && data.username is string
         && data.username.size() <= 30
@@ -97,6 +104,10 @@ service cloud.firestore {
         && (
           data.get('householdID', null) == null
           || data.get('householdID', null) is string
+        )
+        && (
+          !('requiresEmailVerification' in data)
+          || data.requiresEmailVerification == true
         );
     }
 
@@ -139,13 +150,23 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.auth.uid == userID
         && validProfile(request.resource.data)
-        && request.resource.data.get('householdID', null) == null;
+        && request.resource.data.get(
+          'householdID', null
+        ) == null
+        && request.resource.data.get(
+          'requiresEmailVerification', null
+        ) == true;
 
       // Keep the existing household link, or establish one
       // through a valid create or join transaction.
       allow update: if signedIn()
         && request.auth.uid == userID
         && validProfile(request.resource.data)
+        && request.resource.data.get(
+          'requiresEmailVerification', false
+        ) == resource.data.get(
+          'requiresEmailVerification', false
+        )
         && (
             request.resource.data.email == resource.data.email
             || request.resource.data.email == request.auth.token.email
@@ -176,6 +197,11 @@ service cloud.firestore {
       // Authorizes updates for leaving a household or removing a member
       allow update: if signedIn()
         && validProfile(request.resource.data)
+        && request.resource.data.get(
+          'requiresEmailVerification', false
+        ) == resource.data.get(
+          'requiresEmailVerification', false
+        )
         && (
           request.resource.data.email == resource.data.email
           || request.resource.data.email == request.auth.token.email
@@ -232,31 +258,112 @@ service cloud.firestore {
 
     match /households/{householdID} {
 
-      // Membership role used for Stuff permissions.
-      function stuffMemberRole() {
-        return get(
-          /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
-        ).data.memberRole;
+      // Each household member has their own message copies.
+      match /members/{recipientID}/messages/{messageID} {
+        function ownsInbox() {
+          return isMember(householdID)
+            && request.auth.uid == recipientID;
+        }
+
+        function canSendMessage() {
+          return isMember(householdID)
+            && get(
+              /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+            ).data.memberRole in ['manager', 'member'];
+        }
+
+        // Check each selected recipient belongs to this household.
+        function validRecipientAt(ids, index) {
+          return ids.size() <= index
+            || (
+              ids[index] is string
+              && ids[index].size() > 0
+              && !ids[index].matches('.*[/].*')
+              && exists(
+                /databases/$(database)/documents/households/$(householdID)/members/$(ids[index])
+              )
+            );
+        }
+
+        function validRecipients(ids) {
+          return ids is list
+            && ids.size() > 0
+            && ids.size() <= 8
+            && ids.toSet().size() == ids.size()
+            && recipientID in ids
+            && validRecipientAt(ids, 0)
+            && validRecipientAt(ids, 1)
+            && validRecipientAt(ids, 2)
+            && validRecipientAt(ids, 3)
+            && validRecipientAt(ids, 4)
+            && validRecipientAt(ids, 5)
+            && validRecipientAt(ids, 6)
+            && validRecipientAt(ids, 7);
+        }
+
+        function validNewMessage(data) {
+          let fields = [
+            'subject',
+            'body',
+            'sentByMemberID',
+            'sentToMemberIDs',
+            'sentAt',
+            'isRead'
+          ];
+
+          return data.keys().hasAll(fields)
+            && data.keys().hasOnly(fields)
+            && data.subject is string
+            && data.subject.size() > 0
+            && data.subject.size() <= 50
+            && data.body is string
+            && data.body.size() > 0
+            && data.body.size() <= 500
+            && data.sentByMemberID == request.auth.uid
+            && validRecipients(data.sentToMemberIDs)
+            && data.sentAt == request.time
+            && data.isRead == false;
+        }
+
+        allow read: if ownsInbox();
+
+        allow create: if canSendMessage()
+          && validNewMessage(request.resource.data);
+
+        // Recipients may change read status, but not message content.
+        allow update: if ownsInbox()
+          && request.resource.data.isRead is bool
+          && request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly(['isRead']);
+
+        allow delete: if ownsInbox();
       }
 
-      function canManageSharedStuff() {
-        return signedIn()
-          && stuffMemberRole() in ['manager', 'member'];
-      }
+        // Membership role used for Stuff permissions.
+        function stuffMemberRole() {
+          return get(
+            /databases/$(database)/documents/households/$(householdID)/members/$(request.auth.uid)
+          ).data.memberRole;
+        }
 
-      function canManagePrivateStuff(ownerID) {
-        return signedIn()
-          && request.auth.uid == ownerID
-          && stuffMemberRole() in ['manager', 'member', 'child'];
-      }
+        function canManageSharedStuff() {
+          return signedIn()
+            && stuffMemberRole() in ['manager', 'member'];
+        }
 
-      // Manager check used for household deletion:
-      function isDeletingManager() {
-        return isManager(householdID)
-          && exists(
-            /databases/$(database)/documents/households/$(householdID)/deletionLocks/active
-          );
-      }
+        function canManagePrivateStuff(ownerID) {
+          return signedIn()
+            && request.auth.uid == ownerID
+            && stuffMemberRole() in ['manager', 'member', 'child'];
+        }
+
+        // Manager check used for household deletion:
+        function isDeletingManager() {
+          return isManager(householdID)
+            && exists(
+              /databases/$(database)/documents/households/$(householdID)/deletionLocks/active
+            );
+        }
 
       // Record former members to be able to remove them from a household
       // while keeping their private stuff list and items:

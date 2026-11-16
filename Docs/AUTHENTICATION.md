@@ -6,12 +6,15 @@ The HouseHeld app uses Firebase Authentication to manage user sign-in state and 
 
 The authentication flow currently supports:
 * Creating a new account with a username, display name, email, and password
+* Email verification
 * Signing in with email and password
+* "Forgot Password" flow and password reset
 * Persistent signed-in sessions between app launches
 * Signing out
 * Handling authentication errors, such as invalid credentials
 * Creating a new user profile in Cloud Firestore database after registration
-* Temporarily bypassing the login screen for debugging/testing purposes
+* Changing account details from an in-app settings screen
+* Deleting an account from an in-app settings screen
 
 For a more in-depth breakdown of how Firebase Authentication works, see the official Firebase documentation here:
 https://firebase.google.com/docs/auth/flutter/start?_gl=1*tlgk2*_up*MQ..&gclid=EAIaIQobChMIsbOBguWjlwMVWYnCCB05Gwz8EAAYASAAEgI9UPD_BwE&gbraid=0AAAAADpUDOhcNu0rJil-tSmt9x0jU83PR
@@ -53,6 +56,14 @@ state and the `AuthGate()` class detects those changes, prompting Flutter to reb
 So, if the user is not already signed in, Flutter takes them to `login_screen.dart`, which contains the logic for the login screen UI and user sign in.
 The login screen also has a button to register for an account, which takes users to `registration_screen.dart`, which itself contains the logic for
 the registration screen UI and user registration.
+
+When a user successfully signs in through the login screen, the Auth Gate will detect those changes and then check whether or not the user currently belongs
+to a "household". If not, the user will be routed to the `household_onboarding_screen`, where they can either create or join a household. If they do
+belong to a household already, they will be taken to the home screen for that household.
+
+When a user successfully registers a new account through the registration screen, the Auth Gate will detect those changes and immediately route the user
+to the `email_verification_screen`. After successful verification, the user will always be taken to the `household_onboarding_screen`, since all new users
+should not, by default, belong to a household already. 
 
 ## Registration
 
@@ -109,6 +120,22 @@ modifying another user's profile.
 
 So while Firebase Auth determines handles the users that are currently signed in, Cloud Firestore handles the data that belongs to those users.
 
+## Email Verification
+
+When a new user successfully registers their account, they are required to verify their email. To ensure this, new users are taken directly
+to the `email_verification_screen` upon registering a new account. The `email_verification_screen.dart` file contains the UI to help the user 
+complete email verification and the logic to check whether or not a user has completed it yet. Verification emails are sent with the following
+piece of code:
+
+```dart
+await refreshedUser.sendEmailVerification();
+```
+
+Where `sendEmailVerification()` is a built-in method provided by Firebase Auth. The Email verification screen UI contains a button for users
+to resend the verification email (limited to a 60 second cooldown) and a button for users to confirm that they have verified their email.
+Pressing this button checks whether or not the user's email has, in fact, been verified. If not, it will prompt the user to try again.
+If it has been verified successfully, the user will be taken to the `household_onboarding_screen` so they can begin to use the app.
+
 ## Signing In
 
 Existing users can sign in to the app using only the email and password fields. Currently, signing in with username is not supported.
@@ -134,15 +161,6 @@ sign-in, a user can expect to exit the app, still be signed in when returning, a
 Should a user decide to sign-out, Firebase clears their current authentication session. Internally, the User object becomes `null`,
 then `authStateChanges()` emits `null`, then `AuthGate()` rebuilds itself and the login screen appears once again.
 
-## Bypassing
-
-For development purposes, the current implementation includes temporary authentication bypassing functionality. It's main purpose is to
-allow developers working on UI/navigation to enter the main application without having to repeatedly sign-in in case persistence fails.
-
-**Important:** For developers, when bypassing the login screen, you are acting as an unauthorized user, meaning that you will be unable 
-to test features that require user IDs, such as adding/manipulating entries in core features. Developer accounts for the app will be 
-created later to test the household membership system and core feature functionality.
-
 ## Completed Testing
 
 The current implementation has been successfully tested for:
@@ -155,15 +173,16 @@ The current implementation has been successfully tested for:
 * Logging out
 * Re-logging in
 * Authentication persistence after closing and reopening the app
+* Password reset and forgot password flow
+* Email verification
+* Account settings and changing account details
+* Deleting account
 
 All tests here confirm that the simple authentication system is functioning correctly.
 
 ## Future Authentication Work
 
-The current implementation is intentionally minimal and was made merely a proof-of-concept for authentication services.
-Potential future improvements, changes, and additions could include:
-* Signing in with username
-* Password reset and forgot password flow
-* Email verification
-* Account settings and changing account details
-* Deleting account
+The current implementation is complete for the scope of this project.
+
+A potential future additions could include the ability to sign in with username. This work would, most improtantly, require all usernames to be
+unique, which is currently not supported. 

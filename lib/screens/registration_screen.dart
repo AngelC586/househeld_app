@@ -66,7 +66,18 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         'username': username,
         'email': email,
         'displayName': displayName,
+        'requiresEmailVerification': true,
       });
+
+      // Send the first verification email:
+      try {
+        await user.sendEmailVerification();
+      } on FirebaseAuthException catch (error) {
+        debugPrint(
+          'Initial verification email could not be sent: '
+          '${error.code}',
+        );
+      }
 
       if (!mounted) return;
 
