@@ -15,6 +15,9 @@ import '../services/pantry_service.dart';
 import '../services/stuff_service.dart';
 import 'inbox_screen.dart';
 import '../widgets/inbox_message_card.dart';
+import 'reminders_screen.dart';
+import '../widgets/reminder_form_dialog.dart';
+import '../widgets/reminders_home_window.dart';
 
 //import '../services/grocery_service.dart';
 
@@ -275,6 +278,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  final List<Reminder> _reminders = [];
+
+  Future<void> _openAddReminder() async {
+    final result = await showReminderFormDialog(context);
+
+    if (result == null) return;
+  }
+
+  void _openRemindersScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const RemindersScreen()),
+    );
+  }
+
   static const List<InboxMessage> _recentMessages = [];
  
   void _showInboxPreview() {
@@ -375,6 +393,14 @@ class _HomeScreenState extends State<HomeScreen> {
             for (var i = 0; i < members.length; i++)
               AvatarChip(member: members[i], colorSeed: i),
           ],
+        ),
+
+        const SizedBox(height: 22),
+
+        RemindersHomeWindow(
+          reminders: _reminders.where((r) => !r.isCompleted).toList(),
+          onAdd: _openAddReminder,
+          onViewAll: _openRemindersScreen,
         ),
 
         const SizedBox(height: 22),
