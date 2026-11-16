@@ -423,21 +423,18 @@ class GroceryList {
   }
 
   // Use with the signed-in users verified household membership
-  bool canEditItems({
-    required String memberID,
-    required String memberRole,
-  }) {
+  bool canEditItems({required String memberID, required String memberRole}) {
     if (!canView(memberID)) return false;
 
     if (memberRole == 'manager' || memberRole == 'member') {
       return true;
     }
 
-    return memberRole == 'child' && 
-      groceryListID == 'personal_$memberID' &&
-      ownerMemberID == memberID && 
-      groceryListVisibility == 'restricted' && 
-      visibleMemberIDs.isEmpty;
+    return memberRole == 'child' &&
+        groceryListID == 'personal_$memberID' &&
+        ownerMemberID == memberID &&
+        groceryListVisibility == 'restricted' &&
+        visibleMemberIDs.isEmpty;
   }
 
   factory GroceryList.fromMap(String id, Map<String, dynamic> data) {
@@ -550,7 +547,7 @@ class InboxMessage {
   final List<String> sentToMemberIDs; // up to 8
   final DateTime sentAt;
   final bool isRead;
- 
+
   const InboxMessage({
     required this.messageId,
     required this.subject,
@@ -560,13 +557,30 @@ class InboxMessage {
     required this.sentAt,
     this.isRead = false,
   });
- 
+
+  // Read a message from Firestore:
+  factory InboxMessage.fromMap(String messageId, Map<String, dynamic> data) {
+    final sentAt = data['sentAt'];
+
+    return InboxMessage(
+      messageId: messageId,
+      subject: data['subject'] as String? ?? '',
+      body: data['body'] as String? ?? '',
+      sentByMemberID: data['sentByMemberID'] as String? ?? '',
+      sentToMemberIDs: List<String>.from(
+        data['sentToMemberIDs'] as List? ?? const [],
+      ),
+      sentAt: sentAt is Timestamp ? sentAt.toDate() : DateTime.now(),
+      isRead: data['isRead'] as bool? ?? false,
+    );
+  }
+
   String get bodyPreview {
     final trimmed = body.trim();
     if (trimmed.length <= 50) return trimmed;
     return '${trimmed.substring(0, 50)}…';
   }
- 
+
   InboxMessage copyWith({bool? isRead}) {
     return InboxMessage(
       messageId: messageId,
@@ -579,4 +593,3 @@ class InboxMessage {
     );
   }
 }
-
