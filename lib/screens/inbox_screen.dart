@@ -1,23 +1,118 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import 'dart:async';
 
 import '../models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/inbox_message_card.dart';
+import '../services/inbox_service.dart';
+import '../services/household_service.dart';
 
 class InboxScreen extends StatefulWidget {
-  const InboxScreen({super.key});
+  const InboxScreen({super.key, required this.householdID});
+
+  final String householdID;
 
   @override
   State<InboxScreen> createState() => _InboxScreenState();
 }
 
 class _InboxScreenState extends State<InboxScreen> {
-  // Uncomment this for database integration:
-  // final String _currentUserID = '';
+  final InboxService _inboxService = InboxService();
+  StreamSubscription<List<InboxMessage>>? _messagesSubscription;
+
+  bool _isLoading = true;
+  String? _loadError;
 
   final List<InboxMessage> _messages = [];
 
-  final Map<String, String> _memberNames = const {};
+  final Map<String, String> _memberNames = {};
+  final HouseholdService _householdService = HouseholdService();
+
+  StreamSubscription<List<HouseholdMember>>? _membersSubscription;
+
+  bool _canSend = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _messagesSubscription = _inboxService
+        .watchMessages(widget.householdID)
+        .listen(
+          (messages) {
+            if (!mounted) return;
+
+            setState(() {
+              _messages
+                ..clear()
+                ..addAll(messages);
+              _isLoading = false;
+              _loadError = null;
+            });
+          },
+          onError: (error) {
+            debugPrint('Loading Inbox failed: $error');
+            if (!mounted) return;
+
+            setState(() {
+              _messages.clear();
+              _isLoading = false;
+              _loadError = 'Unable to load youre messages. Please try again.';
+            });
+          },
+        );
+
+    _membersSubscription = _householdService
+        .watchMembers(widget.householdID)
+        .listen(
+          (members) {
+            if (!mounted) return;
+
+            final userID = FirebaseAuth.instance.currentUser?.uid;
+            String? role;
+
+            for (final member in members) {
+              if (member.userID == userID) {
+                role = member.memberRole;
+              }
+            }
+
+            setState(() {
+              _memberNames
+                ..clear()
+                ..addEntries(
+                  members.map(
+                    (member) => MapEntry(
+                      member.userID,
+                      member.displayName.trim().isEmpty
+                          ? 'Household member'
+                          : member.displayName,
+                    ),
+                  ),
+                );
+
+              _canSend = role == 'manager' || role == 'member';
+            });
+          },
+          onError: (Object error) {
+            debugPrint('Loading Inbox members failed: $error');
+            if (!mounted) return;
+
+            setState(() {
+              _memberNames.clear();
+              _canSend = false;
+            });
+          },
+        );
+  }
+
+  @override
+  void dispose() {
+    _messagesSubscription?.cancel();
+    _membersSubscription?.cancel();
+    super.dispose();
+  }
 
   String _nameFor(String uid) => _memberNames[uid] ?? uid;
 
@@ -26,11 +121,29 @@ class _InboxScreenState extends State<InboxScreen> {
     return uids.map(_nameFor).join(', ');
   }
 
-  void _toggleRead(InboxMessage message) {
-    setState(() {
-      final i = _messages.indexWhere((m) => m.messageId == message.messageId);
-      _messages[i] = message.copyWith(isRead: !message.isRead);
-    });
+  Future<void> _runAction(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to update your Inbox. Please try again.'),
+        ),
+      );
+      debugPrint('Inbox action failed: $error');
+    }
+  }
+
+  Future<void> _toggleRead(InboxMessage message) async {
+    await _runAction(
+      () => _inboxService.setRead(
+        householdID: widget.householdID,
+        messageID: message.messageId,
+        isRead: !message.isRead,
+      ),
+    );
   }
 
   Future<bool> _confirm(String title, String message) async {
@@ -52,6 +165,54 @@ class _InboxScreenState extends State<InboxScreen> {
       ),
     );
     return result ?? false;
+  }
+
+  Future<void> _openMessage(InboxMessage message) async {
+    final dialog = showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(message.subject),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'From: ${_nameFor(message.sentByMemberID)}',
+                style: AppText.bodySoft,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'To: ${_namesFor(message.sentToMemberIDs)}',
+                style: AppText.bodySoft,
+              ),
+              const SizedBox(height: 4),
+              Text(formatMessageTime(message.sentAt), style: AppText.bodySoft),
+              const SizedBox(height: 16),
+              SelectableText(message.body, style: AppText.body),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+
+    if (!message.isRead) {
+      await _runAction(
+        () => _inboxService.setRead(
+          householdID: widget.householdID,
+          messageID: message.messageId,
+          isRead: true,
+        ),
+      );
+    }
+
+    await dialog;
   }
 
   void _showMessageMenu(InboxMessage message) {
@@ -85,13 +246,15 @@ class _InboxScreenState extends State<InboxScreen> {
                   'Delete this message?',
                   'Are you sure you want to delete this message?',
                 );
-                if (confirmed) {
-                  setState(
-                    () => _messages.removeWhere(
-                      (m) => m.messageId == message.messageId,
-                    ),
-                  );
-                }
+
+                if (!mounted || !confirmed) return;
+
+                await _runAction(
+                  () => _inboxService.deleteMessage(
+                    householdID: widget.householdID,
+                    messageID: message.messageId,
+                  ),
+                );
               },
             ),
           ],
@@ -101,83 +264,199 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<void> _showSendMessageDialog() async {
+    if (!_canSend) return;
+
     final subjectController = TextEditingController();
     final bodyController = TextEditingController();
     final selected = <String>{};
+    final memberNames = Map<String, String>.from(_memberNames);
 
-    await showDialog<void>(
+    bool isSending = false;
+    String? errorMessage;
+
+    final sent = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('New Message'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: subjectController,
-                  maxLength: 50,
-                  decoration: const InputDecoration(labelText: 'Subject'),
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final everyoneSelected =
+              memberNames.isNotEmpty &&
+              memberNames.keys.every(selected.contains);
+
+          return PopScope(
+            canPop: !isSending,
+            child: AlertDialog(
+              title: const Text('New Message'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: subjectController,
+                      enabled: !isSending,
+                      maxLength: 50,
+                      decoration: const InputDecoration(labelText: 'Subject'),
+                    ),
+                    TextField(
+                      controller: bodyController,
+                      enabled: !isSending,
+                      maxLength: 500,
+                      maxLines: 4,
+                      decoration: const InputDecoration(labelText: 'Message'),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Send To (up to 8)', style: AppText.label),
+                    const SizedBox(height: 6),
+                    if (memberNames.isEmpty)
+                      Text(
+                        'No household members found.',
+                        style: AppText.bodySoft,
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilterChip(
+                            label: const Text('Everyone'),
+                            selected: everyoneSelected,
+                            onSelected: isSending
+                                ? null
+                                : (value) {
+                                    setDialogState(() {
+                                      selected.clear();
+                                      if (value) {
+                                        selected.addAll(memberNames.keys);
+                                      }
+                                    });
+                                  },
+                          ),
+                          for (final entry in memberNames.entries)
+                            FilterChip(
+                              label: Text(entry.value),
+                              selected: selected.contains(entry.key),
+                              onSelected: isSending
+                                  ? null
+                                  : (value) {
+                                      setDialogState(() {
+                                        if (value) {
+                                          if (selected.length < 8) {
+                                            selected.add(entry.key);
+                                          }
+                                        } else {
+                                          selected.remove(entry.key);
+                                        }
+                                      });
+                                    },
+                            ),
+                        ],
+                      ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorMessage!,
+                        style: TextStyle(
+                          color: Theme.of(dialogContext).colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                TextField(
-                  controller: bodyController,
-                  maxLength: 500,
-                  maxLines: 4,
-                  decoration: const InputDecoration(labelText: 'Message'),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSending
+                      ? null
+                      : () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
                 ),
-                const SizedBox(height: 8),
-                Text('Send To (up to 8)', style: AppText.label),
-                const SizedBox(height: 6),
-                if (_memberNames.isEmpty)
-                  Text('No household members found.', style: AppText.bodySoft)
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _memberNames.entries.map((entry) {
-                      final isSelected = selected.contains(entry.key);
-                      return FilterChip(
-                        label: Text(entry.value),
-                        selected: isSelected,
-                        onSelected: (value) {
+                FilledButton(
+                  onPressed: isSending
+                      ? null
+                      : () async {
+                          if (!_canSend) {
+                            setDialogState(() {
+                              errorMessage = 'You no longer have permission to send messages.';
+                            });
+                            return;
+                          }
+
                           setDialogState(() {
-                            if (value) {
-                              if (selected.length < 8) selected.add(entry.key);
-                            } else {
-                              selected.remove(entry.key);
+                            isSending = true;
+                            errorMessage = null;
+                          });
+
+                          try {
+                            await _inboxService.sendMessage(
+                              householdID: widget.householdID,
+                              subject: subjectController.text,
+                              body: bodyController.text,
+                              recipientIDs: selected.toList(),
+                            );
+                          } catch (error) {
+                            debugPrint('Sending Inbox message failed: $error');
+                            if (!dialogContext.mounted) return;
+
+                            setDialogState(() {
+                              isSending = false;
+                              errorMessage = error is StateError
+                                  ? error.message.toString()
+                                  : 'Unable to send your message. Please try again.';
+                            });
+                            return;
+                          }
+
+                          if (!dialogContext.mounted) return;
+
+                          setDialogState(() {
+                            isSending = false;
+                          });
+
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext, true);
                             }
                           });
                         },
-                      );
-                    }).toList(),
-                  ),
+                  child: Text(isSending ? 'Sending...' : 'Send'),
+                ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sending messages is not wired up yet.'),
-                  ),
-                );
-              },
-              child: const Text('Send'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
+
+    // Dispose after the dialog's closing animation finishes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      subjectController.dispose();
+      bodyController.dispose();
+    });
+
+    if (!mounted || sent != true) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Message sent!')));
   }
 
   Widget _buildList(List<InboxMessage> messages, {required String emptyText}) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            _loadError!,
+            textAlign: TextAlign.center,
+            style: AppText.bodySoft,
+          ),
+        ),
+      );
+    }
+
     if (messages.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 24),
@@ -193,6 +472,7 @@ class _InboxScreenState extends State<InboxScreen> {
               sentByName: _nameFor(m.sentByMemberID),
               sentToNames: _namesFor(m.sentToMemberIDs),
               onMenu: () => _showMessageMenu(m),
+              onOpen: () => _openMessage(m),
             ),
           )
           .toList(),
@@ -228,14 +508,15 @@ class _InboxScreenState extends State<InboxScreen> {
                         style: AppText.heading.copyWith(fontSize: 20),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        color: AppColors.forestDeep,
+                    if (_canSend)
+                      IconButton(
+                        icon: const Icon(
+                          Icons.edit_outlined,
+                          color: AppColors.forestDeep,
+                        ),
+                        tooltip: 'Send Message',
+                        onPressed: _showSendMessageDialog,
                       ),
-                      tooltip: 'Send Message',
-                      onPressed: _showSendMessageDialog,
-                    ),
                   ],
                 ),
               ),

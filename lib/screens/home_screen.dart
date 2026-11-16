@@ -15,6 +15,7 @@ import '../services/pantry_service.dart';
 import '../services/stuff_service.dart';
 import 'inbox_screen.dart';
 import '../widgets/inbox_message_card.dart';
+import '../services/inbox_service.dart';
 
 //import '../services/grocery_service.dart';
 
@@ -275,62 +276,109 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  static const List<InboxMessage> _recentMessages = [];
- 
-  void _showInboxPreview() {
-    final recent = _recentMessages.take(5).toList();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Inbox'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: recent.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text('No messages yet.', style: AppText.bodySoft),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: recent
-                      .map(
-                        (m) => ListTile(
+  Future<void> _showInboxPreview() async {
+  final householdID = widget.userProfile.householdID;
+  if (householdID == null || householdID.isEmpty) return;
+
+  final messagesStream = InboxService().watchMessages(householdID);
+  final membersStream = _householdService.watchMembers(householdID);
+
+  final openInbox = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Inbox'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: StreamBuilder<List<HouseholdMember>>(
+          stream: membersStream,
+          builder: (context, membersSnapshot) {
+            final members = membersSnapshot.data ?? [];
+
+            return StreamBuilder<List<InboxMessage>>(
+              stream: messagesStream,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Text(
+                    'Unable to load your messages. Please try again.',
+                  );
+                }
+
+                if (!snapshot.hasData) {
+                  return const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final recent = snapshot.data!.take(5).toList();
+
+                if (recent.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'No messages yet.',
+                      style: AppText.bodySoft,
+                    ),
+                  );
+                }
+
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final message in recent)
+                        ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: !m.isRead
-                              ? const Icon(Icons.circle, size: 10, color: AppColors.clay)
+                          leading: !message.isRead
+                              ? const Icon(
+                                  Icons.circle,
+                                  size: 10,
+                                  color: AppColors.clay,
+                                )
                               : const SizedBox(width: 10),
                           title: Text(
-                            m.subject,
+                            message.subject,
                             style: TextStyle(
-                              fontWeight: m.isRead ? FontWeight.w500 : FontWeight.w700,
+                              fontWeight: message.isRead
+                                  ? FontWeight.w500
+                                  : FontWeight.w700,
                             ),
                           ),
-                          subtitle: Text(formatMessageTime(m.sentAt)),
+                          subtitle: Text(
+                            'From: ${_memberName(members, message.sentByMemberID) ?? 'Unknown member'}'
+                            '\n${formatMessageTime(message.sentAt)}',
+                          ),
                         ),
-                      )
-                      .toList(),
-                ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const InboxScreen()),
-              );
-            },
-            child: const Text('View Inbox →'),
-          ),
-        ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('View Inbox →'),
+        ),
+      ],
+    ),
+  );
 
+  if (!mounted || openInbox != true) return;
+
+  await Navigator.push<void>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => InboxScreen(householdID: householdID),
+    ),
+  );
+}
 
   Widget _buildDashboard({
     required List<HouseholdMember> members,
