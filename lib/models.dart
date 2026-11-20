@@ -643,6 +643,36 @@ class Reminder {
     }
   }
 
+  // An unfinished reminder is overdue once its scheduled time passes.
+  bool get isOverdue =>
+      !isCompleted && reminderDateTime.isBefore(DateTime.now());
+
+  factory Reminder.fromMap(String reminderID, Map<String, dynamic> data) {
+    final dateTime = data['reminderDateTime'];
+
+    if (dateTime is! Timestamp) {
+      throw const FormatException('Invalid reminder date and time.');
+    }
+
+    return Reminder(
+      reminderID: reminderID,
+      reminderTitle: data['reminderTitle'] as String? ?? '',
+      reminderNotes: data['reminderNotes'] as String? ?? '',
+      reminderDateTime: dateTime.toDate(),
+      reminderStatus: data['reminderStatus'] as String? ?? reminderUpcoming,
+      reminderPriority:
+          data['reminderPriority'] as String? ?? reminderPriorityMedium,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'reminderTitle': reminderTitle,
+    'reminderNotes': reminderNotes,
+    'reminderDateTime': reminderDateTime,
+    'reminderStatus': reminderStatus,
+    'reminderPriority': reminderPriority,
+  };
+
   Reminder copyWith({
     String? reminderTitle,
     String? reminderNotes,
