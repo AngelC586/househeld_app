@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 
+import 'dart:async';
+
 import '../models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/reminder_form_dialog.dart';
 import '../widgets/reminder_row_card.dart';
+import '../services/reminder_service.dart';
 
 enum _ReminderSortField { title, date, priority }
 
 enum _SortDirection { asc, desc }
 
 class RemindersScreen extends StatefulWidget {
-  const RemindersScreen({super.key});
+  const RemindersScreen({super.key, required this.householdID});
+
+  final String householdID;
 
   @override
   State<RemindersScreen> createState() => _RemindersScreenState();
@@ -22,36 +27,99 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
   final List<Reminder> _reminders = [];
 
+  final ReminderService _service = ReminderService();
+  StreamSubscription<List<Reminder>>? _reminderSubscription;
+  Timer? _overdueTimer;
+
+  bool _loading = true;
+  String? _loadError;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _reminderSubscription = _service
+        .watchReminders(widget.householdID)
+        .listen(
+          (reminders) {
+            if (!mounted) return;
+
+            setState(() {
+              _reminders
+                ..clear()
+                ..addAll(reminders);
+              _loading = false;
+              _loadError = null;
+            });
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+
+            setState(() {
+              _loading = false;
+              _loadError = 'Unable to load your reminders. Please try again.';
+            });
+          },
+        );
+
+    _overdueTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _reminderSubscription?.cancel();
+    _overdueTimer?.cancel();
+    super.dispose();
+  }
 
   int _compareTitles(Reminder a, Reminder b) =>
       a.reminderTitle.toLowerCase().compareTo(b.reminderTitle.toLowerCase());
 
   List<Reminder> _sorted(List<Reminder> items) {
     final sorted = [...items];
+    final now = DateTime.now();
 
-    switch (_sortField) {
-      case _ReminderSortField.title:
-        sorted.sort(_compareTitles);
-        break;
+    sorted.sort((a, b) {
+      final aOverdue = !a.isCompleted && a.reminderDateTime.isBefore(now);
+      final bOverdue = !b.isCompleted && b.reminderDateTime.isBefore(now);
 
-      case _ReminderSortField.date:
-        sorted.sort((a, b) {
-          final byDate = a.reminderDateTime.compareTo(b.reminderDateTime);
-          return byDate != 0 ? byDate : _compareTitles(a, b);
-        });
-        break;
+      // Overdue reminders stay first in either sort direction.
+      if (aOverdue != bOverdue) {
+        return aOverdue ? -1 : 1;
+      }
 
-      case _ReminderSortField.priority:
-        sorted.sort((a, b) {
-          final byPriority = a.priorityRank.compareTo(b.priorityRank);
-          return byPriority != 0 ? byPriority : _compareTitles(a, b);
-        });
-        break;
-    }
+      int comparison;
 
-    return _sortDirection == _SortDirection.asc
-        ? sorted
-        : sorted.reversed.toList();
+      switch (_sortField) {
+        case _ReminderSortField.title:
+          comparison = _compareTitles(a, b);
+          break;
+
+        case _ReminderSortField.date:
+          comparison = a.reminderDateTime.compareTo(b.reminderDateTime);
+          break;
+
+        case _ReminderSortField.priority:
+          comparison = a.priorityRank.compareTo(b.priorityRank);
+          break;
+      }
+
+      if (comparison != 0) {
+        return _sortDirection == _SortDirection.asc ? comparison : -comparison;
+      }
+
+      // Keep equal dates or priorities alphabetical.
+      final byTitle = _compareTitles(a, b);
+      if (byTitle != 0) return byTitle;
+
+      return a.reminderID.compareTo(b.reminderID);
+    });
+
+    return sorted;
   }
 
   void _pickSort(_ReminderSortField field) {
@@ -89,36 +157,145 @@ class _RemindersScreenState extends State<RemindersScreen> {
     return result ?? false;
   }
 
+  Future<void> _runAction(Future<void> Function() action) async {
+    if (!mounted || _isSaving) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      await action();
+    } catch (error) {
+      debugPrint('Reminder action failed: $error');
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is StateError
+                ? error.message.toString()
+                : 'Unable to save your changes. Please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
   // Create new reminder:
   Future<void> _openCreate() async {
-    final result = await showReminderFormDialog(context);
+    if (_isSaving) return;
 
-    if (result == null) return;
+    final result = await showReminderFormDialog(context);
+    if (!mounted || result == null) return;
+
+    await _runAction(
+      () => _service.createReminder(
+        householdID: widget.householdID,
+        reminder: result,
+      ),
+    );
   }
 
   // Edit existing reminder:
   Future<void> _openEdit(Reminder reminder) async {
-    final result = await showReminderFormDialog(context, existing: reminder);
+    if (_isSaving) return;
 
-    if (result == null) return;
+    final result = await showReminderFormDialog(context, existing: reminder);
+    if (!mounted || result == null) return;
+
+    await _runAction(
+      () => _service.updateReminder(
+        householdID: widget.householdID,
+        reminder: result,
+      ),
+    );
   }
 
   Future<void> _markComplete(Reminder reminder) async {
+    if (_isSaving) return;
+
     final confirmed = await _confirm(
       'Confirm',
       'Are you sure you want to mark ${reminder.reminderTitle} as complete?',
     );
+    if (!mounted || !confirmed) return;
 
-    if (!confirmed) return;
+    await _runAction(
+      () => _service.markComplete(
+        householdID: widget.householdID,
+        reminderID: reminder.reminderID,
+      ),
+    );
   }
 
   Future<void> _delete(Reminder reminder) async {
+    if (_isSaving) return;
+
     final confirmed = await _confirm(
       'Confirm',
       'Are you sure you want to delete ${reminder.reminderTitle}?',
     );
+    if (!mounted || !confirmed) return;
 
-    if (!confirmed) return;
+    await _runAction(
+      () => _service.deleteReminder(
+        householdID: widget.householdID,
+        reminderID: reminder.reminderID,
+      ),
+    );
+  }
+
+  Future<void> _reopen(Reminder reminder) async {
+    if (_isSaving) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final date = await showDatePicker(
+      context: context,
+      helpText: 'Choose a new reminder date',
+      initialDate: today,
+      firstDate: today,
+      lastDate: DateTime(now.year + 10, 12, 31),
+    );
+
+    if (!mounted || date == null) return;
+
+    final time = await showTimePicker(
+      context: context,
+      helpText: 'Choose a new reminder time',
+      initialTime: TimeOfDay.fromDateTime(
+        DateTime.now().add(const Duration(hours: 1)),
+      ),
+    );
+
+    if (!mounted || time == null) return;
+
+    final newDateTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+
+    if (!newDateTime.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a future date and time.')),
+      );
+      return;
+    }
+
+    await _runAction(
+      () => _service.reopenReminder(
+        householdID: widget.householdID,
+        reminderID: reminder.reminderID,
+        newDateTime: newDateTime,
+      ),
+    );
   }
 
   void _handleMenu(Reminder reminder, ReminderMenuAction action) {
@@ -132,11 +309,30 @@ class _RemindersScreenState extends State<RemindersScreen> {
       case ReminderMenuAction.delete:
         _delete(reminder);
         break;
+      case ReminderMenuAction.reopen:
+        _reopen(reminder);
+        break;
     }
   }
 
-
   Widget _reminderList(List<Reminder> items, {required String emptyText}) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            _loadError!,
+            textAlign: TextAlign.center,
+            style: AppText.bodySoft,
+          ),
+        ),
+      );
+    }
+
     final sorted = _sorted(items);
 
     if (sorted.isEmpty) {
@@ -220,7 +416,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
         floatingActionButton: FloatingActionButton(
           backgroundColor: AppColors.clay,
-          onPressed: _openCreate,
+          onPressed: _isSaving ? null : _openCreate,
           child: const Icon(Icons.add, color: Colors.white),
         ),
       ),

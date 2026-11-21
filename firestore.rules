@@ -258,6 +258,63 @@ service cloud.firestore {
 
     match /households/{householdID} {
 
+      // Private reminders belonging to one household member.
+      match /members/{memberID}/reminders/{reminderID} {
+        function ownsReminder() {
+          return isMember(householdID)
+            && request.auth.uid == memberID;
+        }
+
+        function validReminder(data) {
+          let fields = [
+            'reminderTitle',
+            'reminderNotes',
+            'reminderDateTime',
+            'reminderStatus',
+            'reminderPriority'
+          ];
+
+          return data.keys().hasAll(fields)
+            && data.keys().hasOnly(fields)
+            && data.reminderTitle is string
+            && data.reminderTitle.size() > 0
+            && data.reminderTitle.size() <= 50
+            && data.reminderNotes is string
+            && data.reminderNotes.size() <= 250
+            && data.reminderDateTime is timestamp
+            && data.reminderStatus in ['upcoming', 'complete']
+            && data.reminderPriority in ['low', 'medium', 'high'];
+        }
+
+        function validReminderChange() {
+          let before = resource.data;
+          let after = request.resource.data;
+          let changes = after.diff(before).affectedKeys();
+
+          return (
+            // Edit details while keeping the same status.
+            after.reminderStatus == before.reminderStatus
+            ) || (
+              // mark an upcoming reminder as complete.
+              before.reminderStatus == 'upcoming'
+              && after.reminderStatus == 'complete'
+              && changes.hasOnly(['reminderStatus'])
+            ) || (
+              // Reopening requires a future date and time.
+              before.reminderStatus == 'complete'
+              && after.reminderStatus == 'upcoming'
+              && after.reminderDateTime > request.time
+              && changes.hasOnly(['reminderStatus', 'reminderDateTime'])
+          );
+        }
+
+        allow read: if ownsReminder();
+        allow create: if ownsReminder() && validReminder(request.resource.data) && request.resource.data.reminderStatus == 'upcoming';
+        allow update: if ownsReminder() && validReminder(request.resource.data) && validReminderChange();
+        allow delete: if ownsReminder();
+      }
+        
+
       // Each household member has their own message copies.
       match /members/{recipientID}/messages/{messageID} {
         function ownsInbox() {

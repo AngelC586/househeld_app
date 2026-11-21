@@ -17,6 +17,7 @@ import '../services/task_service.dart';
 import '../services/pantry_service.dart';
 import '../services/stuff_service.dart';
 import '../services/inbox_service.dart';
+import '../services/reminder_service.dart';
 import 'inbox_screen.dart';
 import 'reminders_screen.dart';
 
@@ -279,18 +280,86 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  final List<Reminder> _reminders = [];
+  final ReminderService _reminderService = ReminderService();
+  Stream<List<Reminder>>? _remindersStream;
+  bool _savingReminder = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _listenToReminders();
+  }
+
+  void _listenToReminders() {
+    final householdID = widget.userProfile.householdID;
+
+    _remindersStream = householdID == null || householdID.isEmpty
+        ? null
+        : _reminderService.watchReminders(householdID);
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.userProfile.householdID != widget.userProfile.householdID ||
+        oldWidget.userProfile.uid != widget.userProfile.uid) {
+      _listenToReminders();
+    }
+  }
 
   Future<void> _openAddReminder() async {
-    final result = await showReminderFormDialog(context);
+    if (_savingReminder) return;
 
-    if (result == null) return;
+    final householdID = widget.userProfile.householdID;
+    final userID = widget.userProfile.uid;
+    if (householdID == null || householdID.isEmpty) return;
+
+    setState(() => _savingReminder = true);
+
+    try {
+      final result = await showReminderFormDialog(context);
+
+      if (!mounted || result == null) return;
+
+      if (widget.userProfile.householdID != householdID ||
+          widget.userProfile.uid != userID) {
+        return;
+      }
+
+      await _reminderService.createReminder(
+        householdID: householdID,
+        reminder: result,
+      );
+    } catch (error) {
+      debugPrint('Creating reminder failed: $error');
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is StateError
+                ? error.message.toString()
+                : 'Unable to save your reminder. Please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingReminder = false);
+      }
+    }
   }
 
   void _openRemindersScreen() {
-    Navigator.push(
+    final householdID = widget.userProfile.householdID;
+    if (householdID == null || householdID.isEmpty) return;
+
+    Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(builder: (_) => const RemindersScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => RemindersScreen(householdID: householdID),
+      ),
     );
   }
 
@@ -440,10 +509,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
         const SizedBox(height: 22),
 
-        RemindersHomeWindow(
-          reminders: _reminders.where((r) => !r.isCompleted).toList(),
-          onAdd: _openAddReminder,
-          onViewAll: _openRemindersScreen,
+        StreamBuilder<List<Reminder>>(
+          key: ValueKey(
+            '${widget.userProfile.uid}:${widget.userProfile.householdID}',
+          ),
+          stream: _remindersStream,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Text(
+                'Unable to load your reminders. Please try again.',
+                style: AppText.bodySoft,
+              );
+            }
+
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            return Column(
+              children: [
+                if (_savingReminder) const LinearProgressIndicator(),
+                AbsorbPointer(
+                  absorbing: _savingReminder,
+                  child: RemindersHomeWindow(
+                    reminders: snapshot.data!
+                        .where((reminder) => !reminder.isCompleted)
+                        .toList(),
+                    onAdd: _openAddReminder,
+                    onViewAll: _openRemindersScreen,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
 
         const SizedBox(height: 22),

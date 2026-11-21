@@ -4,8 +4,18 @@ import '../models.dart';
 import '../theme/app_theme.dart';
 
 const _monthNames = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ];
 
 String formatReminderDate(DateTime date) {
@@ -28,7 +38,7 @@ Color reminderPriorityColor(String priority) {
   }
 }
 
-enum ReminderMenuAction { complete, edit, delete }
+enum ReminderMenuAction { complete, reopen, edit, delete }
 
 class ReminderRowCard extends StatelessWidget {
   const ReminderRowCard({
@@ -96,6 +106,15 @@ class ReminderRowCard extends StatelessWidget {
                           size: 14,
                           color: AppColors.inkSoft,
                         ),
+                        if (reminder.isOverdue)
+                          const Text(
+                            'Overdue',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         const SizedBox(width: 4),
                         Text(
                           formatReminderDateTime(
@@ -141,6 +160,11 @@ class ReminderRowCard extends StatelessWidget {
                   const PopupMenuItem(
                     value: ReminderMenuAction.complete,
                     child: Text('Mark as Complete'),
+                  ),
+                if (reminder.isCompleted)
+                  const PopupMenuItem(
+                    value: ReminderMenuAction.reopen,
+                    child: Text('Reopen'),
                   ),
                 const PopupMenuItem(
                   value: ReminderMenuAction.edit,
