@@ -10,12 +10,15 @@ class TaskRowCard extends StatelessWidget {
   final VoidCallback? onMenu;
   final String? creatorName;
 
+  final bool showCheckbox;
+
   const TaskRowCard({
     super.key,
     required this.task,
     required this.onToggle,
     this.onMenu,
     this.creatorName,
+    this.showCheckbox = true,
   });
 
   @override
@@ -33,22 +36,25 @@ class TaskRowCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GestureDetector(
-              onTap: onToggle,
-              child: Container(
-                width: 22,
-                height: 22,
-                margin: const EdgeInsets.only(top: 2),
-                decoration: BoxDecoration(
-                  color: task.isCompleted ? AppColors.forest : Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.forest, width: 2),
+            if (showCheckbox) ...[
+              GestureDetector(
+                onTap: onToggle,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  margin: const EdgeInsets.only(top: 2),
+                  decoration: BoxDecoration(
+                    color: task.isCompleted ? AppColors.forest : Colors.white,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.forest, width: 2),
+                  ),
+                  child: task.isCompleted
+                      ? const Icon(Icons.check, size: 14, color: Colors.white)
+                      : null,
                 ),
-                child: task.isCompleted
-                    ? const Icon(Icons.check, size: 14, color: Colors.white)
-                    : null,
               ),
-            ),
+              const SizedBox(width: 12),
+            ],
             const SizedBox(width: 12),
             Expanded(
               child: Column(

@@ -7,14 +7,23 @@ class LowStockRow extends StatelessWidget {
   final String name;
   final String category;
   final VoidCallback onOpen;
+  final bool showViewButton;
 
-  LowStockRow({super.key, required PantryItem item, required this.onOpen})
-      : name = item.foodName,
-        category = item.foodType;
+  LowStockRow({
+    super.key,
+    required PantryItem item,
+    required this.onOpen,
+    this.showViewButton = true,
+  }) : name = item.foodName,
+       category = item.foodType;
 
-  LowStockRow.stuff({super.key, required StuffItem item, required this.onOpen})
-      : name = item.itemName,
-        category = item.isPrivate ? 'Personal' : 'Household';
+  LowStockRow.stuff({
+    super.key,
+    required StuffItem item,
+    required this.onOpen,
+    this.showViewButton = true,
+  }) : name = item.itemName,
+       category = item.isPrivate ? 'Personal' : 'Household';
 
   @override
   Widget build(BuildContext context) {
@@ -40,31 +49,32 @@ class LowStockRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  '$category · out of stock',
-                  style: AppText.bodySoft,
-                ),
+                Text('$category · out of stock', style: AppText.bodySoft),
               ],
             ),
           ),
-          TextButton(
-            onPressed: onOpen,
-            style: TextButton.styleFrom(
-              backgroundColor: AppColors.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-                side: const BorderSide(color: AppColors.line),
+          if (showViewButton)
+            TextButton(
+              onPressed: onOpen,
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                  side: const BorderSide(color: AppColors.line),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            ),
-            child: Text(
-              'View →',
-              style: AppText.body.copyWith(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
+              child: Text(
+                'View →',
+                style: AppText.body.copyWith(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
