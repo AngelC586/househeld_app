@@ -478,6 +478,70 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Inbox preview:
+  Future<void> _openInboxMessage(
+    String householdID,
+    InboxMessage message,
+    List<HouseholdMember> members,
+  ) async {
+    final sender =
+        _memberName(members, message.sentByMemberID) ?? 'Unknown member';
+
+    final recipients = message.sentToMemberIDs
+        .map((id) => _memberName(members, id) ?? 'Unknown member')
+        .join(', ');
+
+    final dialog = showDialog<void>(
+      context: context,
+      builder: (messageContext) => AlertDialog(
+        title: Text(message.subject),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('From: $sender', style: AppText.bodySoft),
+              const SizedBox(height: 4),
+              Text('To: $recipients', style: AppText.bodySoft),
+              const SizedBox(height: 4),
+              Text(formatMessageTime(message.sentAt), style: AppText.bodySoft),
+              const SizedBox(height: 16),
+              SelectableText(message.body, style: AppText.body),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(messageContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+
+    bool readFailed = false;
+
+    if (!message.isRead) {
+      try {
+        await InboxService().setRead(
+          householdID: householdID,
+          messageID: message.messageId,
+          isRead: true,
+        );
+      } catch (error) {
+        debugPrint('Failed to mark message as read: $error');
+        readFailed = true;
+      }
+    }
+
+    await dialog;
+
+    if (!mounted || !readFailed) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Failed to mark message as read.')),
+    );
+  }
+
   Future<void> _showInboxPreview() async {
     final householdID = widget.userProfile.householdID;
     if (householdID == null || householdID.isEmpty) return;
@@ -529,6 +593,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         for (final message in recent)
                           ListTile(
+                            onTap: () => _openInboxMessage(
+                              householdID,
+                              message,
+                              members,
+                            ),
                             contentPadding: EdgeInsets.zero,
                             leading: !message.isRead
                                 ? const Icon(
